@@ -62,3 +62,11 @@ test('deck codes round-trip', () => {
   const r = parseDeck(deckCode(ids), cards);
   assert.deepEqual(r.cards, ids);
 });
+
+test('Black Vortex estimate stops once its card has come out', () => {
+  const rows = [card('A', 2, 3)];
+  const before = board([lane({ loc: 'BlackVortex' }), lane(), lane()], 3, rows)[0].threat.power;
+  const after = board([lane({ loc: 'BlackVortex', used: true }), lane(), lane()], 3, rows)[0].threat.power;
+  assert.equal(before, 5); // average 6-Cost power in this test
+  assert.equal(after, 3);
+});
