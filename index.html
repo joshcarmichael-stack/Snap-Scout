@@ -217,6 +217,42 @@
   .lrow b { font-size: 14px; }
   .lrow p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
 
+
+  /* Board */
+  .total { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+  .total b { font-size: 22px; font-weight: 800; }
+  .total.opp b { color: var(--bad); }
+  .adj { width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); font-size: 14px; padding: 0; flex: none; }
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; min-height: 30px; }
+  .chip { position: relative; width: calc(25% - 3px); min-width: 0; aspect-ratio: 4 / 5; border: 0; padding: 0; border-radius: 6px; overflow: hidden; background: var(--panel-2); }
+  .chip .art { width: 100%; height: 100%; border-radius: 0; }
+  .chip .cpw { position: absolute; right: 1px; bottom: 1px; height: auto; border: 0; border-radius: 5px; background: var(--power); color: #fff; font-size: 10px; font-weight: 800; padding: 0 3px; min-width: 14px; text-align: center; overflow: visible; }
+  .chip .cpw.up { background: var(--good); }
+  .chip .cpw.down { background: var(--bad); }
+  .chip.created { outline: 1px dashed var(--muted); outline-offset: -1px; }
+  .lane-pct { font-size: 10px; color: var(--muted); text-align: center; margin-top: 2px; }
+  .win { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; box-shadow: var(--shadow); }
+  .win .pct { font-size: 30px; font-weight: 800; line-height: 1; }
+  .win .pct small { display: block; font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-top: 3px; }
+  .win .call { font-weight: 800; font-size: 17px; }
+  .win .why { font-size: 12px; color: var(--muted); }
+  .win.good .pct, .win.good .call { color: var(--good); }
+  .win.warn .pct, .win.warn .call { color: var(--warn); }
+  .win.bad .pct, .win.bad .call { color: var(--bad); }
+  .win.idle { color: var(--muted); font-size: 13px; display: block; }
+  .watch { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .watch div { font-size: 12px; background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 6px 10px; }
+  .act-card { display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .act-card .art { width: 56px; height: 70px; }
+  .act-card p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+  .act-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
+  .act-row .btn { height: 52px; padding: 4px; font-size: 13px; line-height: 1.15; }
+  .act-row .btn small { display: block; font-weight: 500; color: var(--muted); font-size: 11px; }
+  .act-row .btn.primary small { color: inherit; opacity: .8; }
+  .act-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 10px 0 6px; }
+  .pw-edit { display: flex; align-items: center; gap: 8px; }
+  .pw-edit b { font-size: 22px; min-width: 40px; text-align: center; }
+
   @media (max-width: 440px) {
     .brand { display: none; }
     .hdr { justify-content: space-between; }
@@ -242,8 +278,10 @@
 </header>
 
 <main id="gameView">
-  <div id="banner"></div>
-  <h2>Lanes <span class="right" id="laneHint">Bars = cards on each side</span></h2>
+  <div id="winBox"></div>
+  <div class="watch" id="watch"></div>
+  <div id="banner" style="margin-top:8px"></div>
+  <h2>Lanes <span class="right">Tap a card on the board to move it</span></h2>
   <div class="lanes" id="lanes"></div>
 
   <h2>Your deck <span class="right" id="myDeckHint"></span></h2>
@@ -295,6 +333,11 @@
   <div class="sheet-list" id="locList"></div>
 </dialog>
 
+<dialog id="actSheet">
+  <div class="sheet-hd"><div class="t"><span id="actTitle"></span><button id="actClose">Close</button></div></div>
+  <div class="sheet-list" id="actBody"></div>
+</dialog>
+
 <dialog id="cardSheet">
   <div class="sheet-hd">
     <div class="t"><span id="cardSheetTitle">Add a card</span><button id="cardClose">Close</button></div>
@@ -311,11 +354,13 @@
     <button class="btn primary" id="cardAdd" disabled>Add</button>
   </div>
 </dialog>
-
 <script type="module">
 import { Model, handProbability, nextPlayLikelihood, opponentThreat } from './model.js';
 import { locationEffect, boardModifiers, laneRules, evaluateBoard, KIND_LABEL } from './locations.js';
 import { parseDeck, deckCode, counterAlerts, bestAnswer, COUNTERS } from './decks.js';
+import { buildBoard } from './engine.js';
+import { ABILITIES } from './abilities.js';
+import { winChance, snapAdvice } from './sim.js';
 
 const ART = (file, w = 96) => (file ? `https://i0.wp.com/marvelsnapzone.com/wp-content/themes/blocksy-child/assets/media/cards/${file}?w=${w}` : '');
 
@@ -339,23 +384,28 @@ for (const c of cardData.cards) {
 const avgPower = (cost) => { const a = avgByCost.get(Math.min(6, Math.max(0, cost))); return a ? a[0] / a[1] : 0; };
 
 // ---- State --------------------------------------------------------------
-// Game state and saved decks are kept on this device only.
-const STORE = 'snap-scout-v3';
+// The game is an event log (see engine.js); lanes keep the location and any
+// manual correction to the computed totals. Everything stays on this device.
+const STORE = 'snap-scout-v4';
 const DECKS = 'snap-scout-decks';
-const freshLane = () => ({ loc: null, mine: 0, theirs: 0, myCards: 0, oppCards: 0, extras: [], used: false });
-const fresh = () => ({ turn: 1, energy: null, hand: null, played: [], mine: {}, myExtra: [], sort: 'next', showAll: false, lanes: [0, 1, 2].map(freshLane) });
+const freshLane = () => ({ loc: null, used: false, adjMe: 0, adjOpp: 0 });
+const fresh = () => ({ turn: 1, energy: null, hand: null, events: [], mine: {}, myExtra: [], sort: 'next', showAll: false, lanes: [0, 1, 2].map(freshLane) });
 let state = fresh();
 let decks = { list: [], active: null };
 const load = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
-const s0 = load(STORE) || load('snap-scout-v2');
-if (s0 && Array.isArray(s0.lanes)) state = { ...state, ...s0, lanes: s0.lanes.map((l) => ({ ...freshLane(), ...l })), mine: s0.mine || {}, myExtra: s0.myExtra || [] };
+const s0 = load(STORE);
+if (s0 && Array.isArray(s0.events)) state = { ...state, ...s0, lanes: s0.lanes.map((l) => ({ ...freshLane(), ...l })) };
 const d0 = load(DECKS);
 if (d0 && Array.isArray(d0.list)) decks = d0;
 const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); localStorage.setItem(DECKS, JSON.stringify(decks)); } catch {} };
 let view = 'game';
+let seq = Date.now() % 100000;
+const newUid = () => `e${(++seq).toString(36)}`;
 
 const energy = () => state.energy ?? state.turn;
-const handSize = () => state.hand ?? Math.max(0, Math.min(7, 3 + state.turn - state.played.length));
+const oppDeckEvents = () => state.events.filter((e) => e.side === 'opp' && (e.t === 'play' || e.t === 'log'));
+const myPlays = () => state.events.filter((e) => e.side === 'me' && e.t === 'play');
+const handSize = () => state.hand ?? Math.max(0, Math.min(7, 3 + state.turn - oppDeckEvents().length));
 const activeDeck = () => decks.list.find((d) => d.id === decks.active) || null;
 
 // ---- Helpers ------------------------------------------------------------
@@ -365,49 +415,126 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&
 const artHtml = (file, alt) => `<span class="art">${file ? `<img src="${ART(file)}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'fallback',textContent:${esc(JSON.stringify(alt))}}))">` : `<span class="fallback">${esc(alt)}</span>`}</span>`;
 const nameOf = (id) => cards.get(id)?.name ?? id;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const locName = (i) => (state.lanes[i].loc && locations.get(state.lanes[i].loc)?.name) || `Location ${i + 1}`;
+const abilityKind = (id) => { const a = ABILITIES[id]; if (a) return a.kind; return cards.get(id)?.special ? 'unmodelled' : 'modelled'; };
+const abilityNote = (id) => ABILITIES[id]?.note || (cards.get(id)?.special ? 'Ability not modelled: printed Power only.' : 'No ability.');
 
 // ---- Game computation --------------------------------------------------
+function boardFor(events) {
+  return buildBoard(events, { cards, lanes: state.lanes, turn: state.turn, avgPower });
+}
+function lanesFrom(board) {
+  return state.lanes.map((l, i) => ({
+    loc: l.loc, used: l.used,
+    mine: board.lanes[i].me.power + l.adjMe, theirs: board.lanes[i].opp.power + l.adjOpp,
+    myCards: board.lanes[i].me.cards, oppCards: board.lanes[i].opp.cards,
+  }));
+}
+
 function compute() {
-  const mods = boardModifiers(state.lanes, state.turn, avgPower);
-  const seen = model.toIndices(state.played);
-  const { probs, alpha } = model.predict(seen);
-  const played = new Set(state.played);
-  const oppEnergy = energy() + mods.oppEnergy;
-  const myEnergy = energy() + mods.myEnergy;
+  const board = boardFor(state.events);
+  const lanes = lanesFrom(board);
+  const mods = boardModifiers(lanes, state.turn, avgPower);
+  const seenIds = oppDeckEvents().filter((e) => !cards.get(e.id)?.generated).map((e) => e.id);
+  const { probs, alpha } = model.predict(model.toIndices(seenIds));
+  const seen = new Set(seenIds);
+  // Energy left this turn: what's already been played this turn is spent.
+  const spent = (side) => state.events.filter((e) => e.t === 'play' && e.side === side && e.turn === state.turn)
+    .reduce((s, e) => s + (cards.get(e.id) ? mods.costOf(cards.get(e.id)) : 0), 0);
+  const oppSpent = spent('opp'), mySpent = spent('me');
+  const oppEnergy = Math.max(0, energy() + mods.oppEnergy - oppSpent);
+  const myEnergy = Math.max(0, energy() + mods.myEnergy - mySpent);
   const rows = [];
   probs.forEach((p, i) => {
     const id = model.ids[i];
     const c = cards.get(id);
-    if (!c || played.has(id) || p < 0.005) return;
+    if (!c || seen.has(id) || p < 0.005) return;
     const cost = mods.costOf(c);
-    const pHand = handProbability(p, handSize(), state.played.length);
+    const pHand = handProbability(p, handSize(), seenIds.length);
     rows.push({ ...c, baseCost: c.cost, cost, power: mods.powerOf(c), pDeck: p, pHand, pNext: nextPlayLikelihood(pHand, cost, oppEnergy) });
   });
-  const threatFor = (i) => opponentThreat(rows, oppEnergy, laneRules(state.lanes, i, state.turn, 'opp', avgPower, mods));
-  const board = evaluateBoard(state.lanes, state.turn, threatFor, avgPower);
 
-  // My side: cards in hand if any are marked, otherwise everything not yet played.
-  const deck = activeDeck();
-  let myRows = [], myFrom = '';
-  const extras = state.myExtra.filter((x) => state.mine[`x:${x.key}`] !== 'played');
-  if (deck || extras.length) {
-    const status = (id) => state.mine[id] || 'deck';
-    const deckCards = deck ? deck.cards : [];
-    const hand = deckCards.filter((id) => status(id) === 'hand');
-    const pool = hand.length || !deck ? hand : deckCards.filter((id) => status(id) !== 'played');
-    myFrom = hand.length || extras.length ? 'hand' : 'deck';
-    myRows = pool.map((id) => cards.get(id)).filter(Boolean).map((c) => ({ ...c, cost: mods.costOf(c), power: mods.powerOf(c) }));
-    for (const x of extras) {
-      const c = cards.get(x.id);
-      if (c) myRows.push({ ...c, cost: mods.costOf(c), power: x.power });
-    }
+  // Threat per lane: what each likely card would really add there, with its
+  // ability and the location applied by the engine.
+  const pool = rows.filter((r) => r.cost <= oppEnergy && r.pHand >= 0.15).sort((a, b) => b.pNext - a.pNext).slice(0, 6);
+  const gain = new Map(); // `${id}:${lane}` -> { here, swing }
+  for (const r of pool) for (let lane = 0; lane < 3; lane++) {
+    const b = boardFor([...state.events, { t: 'play', uid: 'what-if', side: 'opp', id: r.id, lane, turn: state.turn }]);
+    const here = b.lanes[lane].opp.power - board.lanes[lane].opp.power;
+    const swing = [0, 1, 2].reduce((s, i) => s + (b.lanes[i].opp.power - board.lanes[i].opp.power) - (b.lanes[i].me.power - board.lanes[i].me.power), 0);
+    gain.set(`${r.id}:${lane}`, { here, swing });
   }
-  const answers = board.map((b, i) => {
+  const threatFor = (i) => {
+    const rules = laneRules(lanes, i, state.turn, 'opp', avgPower, mods);
+    const laneRows = pool.map((r) => ({ ...r, power: gain.get(`${r.id}:${i}`)?.here ?? r.power }));
+    return opponentThreat(laneRows, oppEnergy, { ...rules, bonus: () => 0 });
+  };
+  const evals = evaluateBoard(lanes, state.turn, threatFor, avgPower);
+
+  // Big swings to warn about (e.g. Arnim Zola on a doubled Black Panther).
+  const watch = [];
+  for (const r of pool) {
+    let best = null;
+    for (let lane = 0; lane < 3; lane++) {
+      const g = gain.get(`${r.id}:${lane}`);
+      const rules = laneRules(lanes, lane, state.turn, 'opp', avgPower, mods);
+      if (!g || !rules.capacity || !rules.allowed(r)) continue;
+      if (!best || g.swing > best.swing) best = { ...g, lane };
+    }
+    if (best && best.swing >= 10 && best.swing > r.power + 3) watch.push({ r, ...best });
+  }
+  watch.sort((a, b) => b.swing * b.r.pNext - a.swing * a.r.pNext);
+
+  // My side.
+  const deck = activeDeck();
+  const playedMine = new Set(myPlays().map((e) => e.id));
+  const extras = state.myExtra.filter((x) => !x.played);
+  let myRows = [];
+  if (deck || extras.length) {
+    const deckCards = deck ? deck.cards.filter((id) => !playedMine.has(id)) : [];
+    const hand = deckCards.filter((id) => state.mine[id] === 'hand');
+    const pool2 = hand.length || !deck ? hand : deckCards;
+    myRows = pool2.map((id) => cards.get(id)).filter(Boolean).map((c) => ({ ...c, cost: mods.costOf(c), power: mods.powerOf(c) }));
+    for (const x of extras) { const c = cards.get(x.id); if (c) myRows.push({ ...c, cost: mods.costOf(c), power: x.power }); }
+  }
+  const answers = evals.map((b, i) => {
     if ((!deck && !extras.length) || b.status === 'safe' || b.status === 'closed' || b.scoring) return null;
     const target = b.status === 'at-risk' ? b.holdNeed : b.holdNeed || b.need;
-    return bestAnswer(myRows, myEnergy, laneRules(state.lanes, i, state.turn, 'me', avgPower, mods), target);
+    return bestAnswer(myRows, myEnergy, laneRules(lanes, i, state.turn, 'me', avgPower, mods), target);
   });
-  return { rows, alpha, mods, board, answers, myFrom, oppEnergy, myEnergy };
+  return { board, lanes, rows, alpha, mods, evals, answers, watch, oppEnergy, myEnergy, oppSpent, mySpent, seenIds, playedMine };
+}
+
+// ---- Win chance (runs after render, debounced) ---------------------------
+let winTimer = null, winKey = '';
+function scheduleWin(c) {
+  const deck = activeDeck();
+  if (!deck) {
+    $('winBox').innerHTML = `<div class="win idle">Add your deck in <b>My decks</b> to see your win chance and when to snap.</div>`;
+    return;
+  }
+  const key = JSON.stringify([state.events, state.lanes, state.turn, state.energy, state.hand, state.mine, state.myExtra, decks.active]);
+  if (key === winKey) return;
+  winKey = key;
+  clearTimeout(winTimer);
+  winTimer = setTimeout(() => {
+    const lastTurn = state.lanes.some((l, i) => l.loc === 'Limbo' && state.turn >= i + 1) ? 7 : c.mods.lastTurn;
+    const playedMine = c.playedMine;
+    const left = deck.cards.filter((id) => !playedMine.has(id));
+    const handIds = left.filter((id) => state.mine[id] === 'hand');
+    const myHand = [...handIds.map((id) => ({ id })), ...state.myExtra.filter((x) => !x.played).map((x) => ({ id: x.id, power: x.power }))];
+    const res = winChance({
+      events: state.events, lanes: state.lanes, turn: state.turn, lastTurn, cards, avgPower,
+      oppRows: c.rows.map((r) => ({ id: r.id, pDeck: r.pDeck })), oppSeen: c.seenIds.length, oppHand: handSize(),
+      myHand, myDeckLeft: left.filter((id) => !handIds.includes(id)),
+      myHandSize: handIds.length ? 0 : Math.max(0, Math.min(7, 3 + state.turn - playedMine.size)),
+      energyAt: (t) => (t === state.turn ? energy() : t), runs: 160, seed: state.events.length + state.turn * 7,
+    });
+    const adv = snapAdvice(res.p);
+    $('winBox').innerHTML = `<div class="win ${adv.tone}"><div class="pct tnum">${Math.round(res.p * 100)}%<small>win chance</small></div>
+      <div><div class="call">${esc(adv.call)}</div><div class="why">${esc(adv.why)} ${res.runs} playouts to turn ${lastTurn}${handIds.length || myHand.length ? '' : '; mark your hand for a sharper read'}.</div></div></div>`;
+    document.querySelectorAll('[data-lanepct]').forEach((el) => { el.textContent = `You win this lane in ${pct(res.lanes[Number(el.dataset.lanepct)].pWin)} of playouts`; });
+  }, 120);
 }
 
 // ---- Render: game -------------------------------------------------------
@@ -419,45 +546,56 @@ function renderHeader(c) {
   $('handLbl').className = state.hand == null ? 'auto' : '';
   const notes = [];
   if (state.turn === c.mods.lastTurn) notes.push('Final turn: the game ends after this one.');
-  if (c.oppEnergy !== energy()) notes.push(`Opponent has ${c.oppEnergy} energy this turn from locations.`);
-  if (c.myEnergy !== energy() && activeDeck()) notes.push(`You have ${c.myEnergy} energy this turn from locations.`);
-  if (c.mods.forced.length) notes.push(`All cards must be played at Location ${c.mods.forced[0] + 1} this turn.`);
+  if (c.oppEnergy !== energy()) notes.push(`Opponent has ${c.oppEnergy} energy left this turn${c.oppSpent ? ` (${c.oppSpent} spent)` : ' (locations)'}.`);
+  if (c.myEnergy !== energy() && (activeDeck() || c.mySpent)) notes.push(`You have ${c.myEnergy} energy left this turn${c.mySpent ? ` (${c.mySpent} spent)` : ' (locations)'}.`);
+  if (c.mods.forced.length) notes.push(`All cards must be played at ${locName(c.mods.forced[0])} this turn.`);
+  for (const p of c.board.pending) notes.push(`${p.side === 'me' ? 'You' : 'They'}: ${p.label}`);
+  for (const n of c.board.notes) notes.push(n);
   $('banner').innerHTML = notes.map((n) => `<div class="banner">${esc(n)}</div>`).join('');
+  $('watch').innerHTML = c.watch.slice(0, 2).map((w) => `<div>Watch: <b>${esc(w.r.name)}</b> at ${esc(locName(w.lane))} would swing about ${w.swing} power across the board (${pct(w.r.pNext)} likely next).</div>`).join('');
+}
+
+function chipHtml(c, board) {
+  const p = board.power(c);
+  const base = cards.get(c.id)?.power ?? 0;
+  return `<button class="chip ${c.created ? 'created' : ''}" data-chip="${esc(c.uid)}" aria-label="${esc(nameOf(c.id))}, ${p} power">${artHtml(cards.get(c.id)?.art, nameOf(c.id))}<span class="cpw ${p > base ? 'up' : p < base ? 'down' : ''}">${p}</span></button>`;
 }
 
 function renderLanes(c) {
   const html = state.lanes.map((lane, i) => {
     const loc = lane.loc && locations.get(lane.loc);
     const fx = locationEffect(lane.loc);
-    const b = c.board[i];
+    const b = c.evals[i];
     const t = b.threat;
+    const L = c.lanes[i];
+    const opp = c.board.active.filter((x) => x.lane === i && x.side === 'opp');
+    const me = c.board.active.filter((x) => x.lane === i && x.side === 'me');
     const threatHtml = b.status === 'closed' ? '' : t.cards.length
-      ? `Opp could add <b>+${t.power}</b>: ${t.cards.map((x) => esc(x.name)).join(' + ')}${t.notModelled.length ? ` <span class="nm">· ${plural(t.notModelled.length, 'ability')} not modelled</span>` : ''}`
+      ? `Opp could add <b>+${Math.round(t.power)}</b>: ${t.cards.map((x) => esc(x.name)).join(' + ')}${t.cards.some((x) => abilityKind(x.id) === 'unmodelled') ? ' <span class="nm">· some abilities not modelled</span>' : ''}`
       : 'No likely affordable plays here.';
     const notes = b.notes.map((n) => `<br>${esc(n)}`).join('');
     const a = c.answers[i];
     const answer = !a ? '' : `<div class="answer ${a.enough ? '' : 'short'}">${a.enough ? 'Play' : 'Best:'} <b>${a.cards.map((x) => esc(x.name)).join(' + ')}</b> (+${Math.round(a.power)}, ${a.cost}⚡)${a.enough ? '' : ' – not enough'}</div>`;
-    const pips = (side, n) => `<div class="pips" aria-label="${side === 'opp' ? 'Opponent' : 'My'} cards here">${[1, 2, 3, 4].map((k) => `<button class="${n >= k ? 'on' : ''}" data-pip="${i}:${side}:${k}" aria-label="${k} cards"></button>`).join('')}</div>`;
     return `<div class="lane">
       <button class="loc" data-loc="${i}" aria-label="Set location ${i + 1}">
         ${loc ? `<img src="${ART(loc.art, 240)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
         <span class="loc-txt">${loc ? `<span class="loc-name">${esc(loc.name)}</span>` : `<span class="loc-empty">Location ${i + 1}<br>Tap to set</span>`}</span>
       </button>
       ${loc ? `<div class="loc-fx" title="${esc(loc.ability)}">${esc(fx?.once && lane.used ? 'Next-card effect already used.' : fx?.note || loc.ability || 'No effect.')}</div><div class="side"><span class="badge ${fx?.kind || 'none'}">${KIND_LABEL[fx?.kind || 'none']}</span></div>` : ''}
+      <div class="side">
+        <div class="total opp"><button class="adj" data-adj="${i}:adjOpp:-1" aria-label="Opponent power −1">−</button><b class="tnum">${L.theirs}</b><button class="adj" data-adj="${i}:adjOpp:1" aria-label="Opponent power +1">+</button></div>
+        <div class="chips">${opp.map((x) => chipHtml(x, c.board)).join('')}</div>
+      </div>
+      <div class="side">
+        <div class="chips">${me.map((x) => chipHtml(x, c.board)).join('')}</div>
+        <div class="total"><button class="adj" data-adj="${i}:adjMe:-1" aria-label="My power −1">−</button><b class="tnum">${L.mine}</b><button class="adj" data-adj="${i}:adjMe:1" aria-label="My power +1">+</button></div>
+      </div>
       <div class="lane-tools">
-        ${lane.extras.length ? `<div class="extras">${lane.extras.map((x, k) => `<button class="xchip ${x.side}" data-unextra="${i}:${k}" aria-label="Remove ${esc(nameOf(x.id))}">${esc(nameOf(x.id))} ${x.power} ✕</button>`).join('')}</div>` : ''}
         ${fx?.once ? `<button class="usedchip ${lane.used ? 'on' : ''}" data-used="${i}">${lane.used ? 'Effect used ✓' : 'Mark effect used'}</button>` : ''}
         <button class="addcard ${fx?.creates ? 'hl' : ''}" data-addcard="${i}">${fx?.creates ? 'What came out?' : '+ Add card'}</button>
       </div>
-      <div class="side"><label>Opponent</label>
-        <div class="pw opp"><button data-pw="${i}:theirs:-1" aria-label="Opponent power down">−</button><input class="tnum" inputmode="numeric" type="number" data-lane="${i}:theirs" value="${lane.theirs}" aria-label="Opponent power lane ${i + 1}"><button data-pw="${i}:theirs:1" aria-label="Opponent power up">+</button></div>
-        ${pips('opp', lane.oppCards)}
-      </div>
-      <div class="side"><label>Me</label>
-        <div class="pw"><button data-pw="${i}:mine:-1" aria-label="My power down">−</button><input class="tnum" inputmode="numeric" type="number" data-lane="${i}:mine" value="${lane.mine}" aria-label="My power lane ${i + 1}"><button data-pw="${i}:mine:1" aria-label="My power up">+</button></div>
-        ${pips('me', lane.myCards)}
-      </div>
       <div class="verdict ${b.status}">${esc(b.headline)}<small>${esc(b.sub)}</small></div>
+      <div class="lane-pct" data-lanepct="${i}"></div>
       <div class="threat">${threatHtml}${notes}</div>
       ${answer || '<div class="lane-pad"></div>'}
     </div>`;
@@ -467,38 +605,34 @@ function renderLanes(c) {
 
 function renderMyDeck(c) {
   const deck = activeDeck();
-  const extraHtml = state.myExtra.map((x) => {
-    const st = state.mine[`x:${x.key}`] === 'played' ? 'played' : 'hand';
-    return `<button class="pcard ${st}" data-myx="${x.key}" aria-label="${esc(nameOf(x.id))}: ${st}">${artHtml(cards.get(x.id)?.art, nameOf(x.id))}<span class="lbl">${st === 'played' ? 'Played' : `Created ${x.power}`}</span></button>`;
-  }).join('');
+  const extraHtml = state.myExtra.map((x) => `<button class="pcard ${x.played ? 'played' : 'hand'}" data-myx="${x.key}" aria-label="${esc(nameOf(x.id))}">${artHtml(cards.get(x.id)?.art, nameOf(x.id))}<span class="lbl">${x.played ? 'Played' : `Created ${x.power}`}</span></button>`).join('');
   if (!deck) {
     $('myDeckHint').textContent = '';
-    $('myDeck').innerHTML = (extraHtml ? `<div class="strip mine">${extraHtml}</div>` : '') + `<button class="cta" data-go="decks"><b>Add your deck</b> to get counter alerts and the best play for each lane.</button>`;
+    $('myDeck').innerHTML = (extraHtml ? `<div class="strip mine">${extraHtml}</div>` : '') + `<button class="cta" data-go="decks"><b>Add your deck</b> for your win chance, counter alerts and the best play for each lane.</button>`;
     $('alerts').innerHTML = '';
     return;
   }
-  $('myDeckHint').textContent = `${deck.name} · tap: hand → played`;
-  const st = (id) => state.mine[id] || 'deck';
+  $('myDeckHint').textContent = `${deck.name} · tap to play or mark in hand`;
+  const st = (id) => (c.playedMine.has(id) ? 'played' : state.mine[id] === 'hand' ? 'hand' : 'deck');
   $('myDeck').innerHTML = `<div class="strip mine">${deck.cards.map((id) => {
     const card = cards.get(id);
     return `<button class="pcard ${st(id)}" data-mine="${id}" aria-label="${esc(nameOf(id))}: ${st(id)}">${artHtml(card?.art, nameOf(id))}<span class="lbl">${st(id) === 'hand' ? 'In hand' : st(id) === 'played' ? 'Played' : esc(nameOf(id))}</span></button>`;
   }).join('')}${extraHtml}</div>`;
   const remaining = deck.cards.filter((id) => st(id) !== 'played');
-  const alerts = counterAlerts(remaining, state.played, c.rows, cards);
+  const alerts = counterAlerts(remaining, c.seenIds, c.rows, cards);
   $('alerts').innerHTML = alerts.map((a) => {
     const card = cards.get(a.id);
-    const targets = a.onBoard.length
-      ? `On board: ${a.onBoard.map((x) => esc(x.name)).join(', ')}`
-      : `Likely: ${a.likely.map((x) => `${esc(x.name)} ${pct(x.pDeck)}`).join(', ')}`;
+    const targets = a.onBoard.length ? `On board: ${a.onBoard.map((x) => esc(x.name)).join(', ')}` : `Likely: ${a.likely.map((x) => `${esc(x.name)} ${pct(x.pDeck)}`).join(', ')}`;
     return `<div class="alert">${artHtml(card?.art, card?.name ?? a.id)}<span><b>${esc(card?.name ?? a.id)}</b> ${esc(a.why)}<small>${targets}</small></span><span class="p tnum">${a.onBoard.length ? 'Now' : pct(a.pAny)}</span></div>`;
   }).join('');
 }
 
 function renderPlayed() {
-  $('playedCount').textContent = `${state.played.length}/12`;
-  $('played').innerHTML = state.played.length
-    ? state.played.map((id, i) => `<button class="pcard" data-remove="${i}" aria-label="Remove ${esc(nameOf(id))}">${artHtml(cards.get(id)?.art, nameOf(id))}<span class="lbl">${esc(nameOf(id))}</span><i>✕</i></button>`).reverse().join('')
-    : '<div class="empty">Tap a card below as your opponent plays it.</div>';
+  const ev = oppDeckEvents();
+  $('playedCount').textContent = `${ev.length}/12`;
+  $('played').innerHTML = ev.length
+    ? ev.map((e) => `<button class="pcard" data-unevent="${e.uid}" aria-label="Remove ${esc(nameOf(e.id))}">${artHtml(cards.get(e.id)?.art, nameOf(e.id))}<span class="lbl">${esc(nameOf(e.id))}${e.t === 'log' ? ' ·?' : ''}</span><i>✕</i></button>`).reverse().join('')
+    : '<div class="empty">Tap a card below as your opponent plays it, then tap where it went.</div>';
 }
 
 function renderList(c) {
@@ -507,7 +641,7 @@ function renderList(c) {
   const label = { deck: 'in deck', hand: 'in hand', next: 'next play' }[state.sort];
   rows.sort((a, b) => b[key] - a[key] || b.pDeck - a.pDeck);
   for (const b of $('sortTabs').children) b.setAttribute('aria-pressed', String(b.dataset.sort === state.sort));
-  $('matchInfo').textContent = !state.played.length
+  $('matchInfo').textContent = !c.seenIds.length
     ? 'Most-played cards in the current meta. Tap one when the opponent plays it.'
     : c.alpha > 0.05 ? `Matches a known deck (${Math.round(c.alpha * 100)}% weight) plus card co-occurrence.` : 'Based on cards that appear alongside what you’ve seen.';
   const limit = state.showAll ? 60 : 20;
@@ -515,7 +649,7 @@ function renderList(c) {
       ${artHtml(r.art, r.name)}
       <span style="min-width:0">
         <span class="nm-line"><b>${esc(r.name)}</b><span class="cp"><span class="cost ${r.cost !== r.baseCost ? 'mod' : ''}">${r.cost}</span><span class="pow">${r.power}</span></span></span>
-        <span class="sub tnum"><span>${pct(r.pDeck)} deck</span><span>${pct(r.pHand)} hand</span>${r.ongoing ? '<span class="nm">Ongoing</span>' : ''}</span>
+        <span class="sub tnum"><span>${pct(r.pDeck)} deck</span><span>${pct(r.pHand)} hand</span>${abilityKind(r.id) === 'unmodelled' ? '<span class="nm">Ability not modelled</span>' : ''}</span>
         <span class="bar"><i style="width:${Math.min(100, Math.round(r[key] * 100))}%"></i></span>
       </span>
       <span class="big tnum"><b>${pct(r[key])}</b><small>${label}</small></span>
@@ -527,8 +661,8 @@ function renderList(c) {
 function renderSearch() {
   const q = $('search').value.trim().toLowerCase();
   if (!q) { $('results').innerHTML = ''; return; }
-  const played = new Set(state.played);
-  $('results').innerHTML = searchCards(q, played).map((c) => resHtml(c, 'add')).join('') || '<div class="empty">No card matches.</div>';
+  const seen = new Set(oppDeckEvents().map((e) => e.id));
+  $('results').innerHTML = searchCards(q, seen).map((c) => resHtml(c, 'add')).join('') || '<div class="empty">No card matches.</div>';
 }
 const searchCards = (q, exclude) => cardData.cards
   .filter((c) => !exclude.has(c.id) && c.name.toLowerCase().includes(q))
@@ -537,7 +671,7 @@ const searchCards = (q, exclude) => cardData.cards
 const resHtml = (c, attr) => `<button class="res" data-${attr}="${c.id}">${artHtml(c.art, c.name)}<span><b>${esc(c.name)}</b><small>${c.cost} cost · ${c.power} power${c.generated ? ' · generated' : ''}</small></span></button>`;
 
 // ---- Render: decks ------------------------------------------------------
-let editing = null; // { id, name, cards }
+let editing = null;
 function renderDecks() {
   $('deckEditor').hidden = !editing;
   $('deckList').hidden = !!editing;
@@ -553,12 +687,17 @@ function renderDecks() {
         <button class="btn danger" data-del="${d.id}">Delete</button>
       </div>
       ${counterSummary(d)}
+      ${modelSummary(d)}
     </div>`).join('')
     : '<div class="empty">No decks yet. Tap <b>New deck</b>, then paste a deck code from Marvel Snap (Decks → your deck → Copy) or add cards one by one.</div>';
 }
 function counterSummary(d) {
   const tech = d.cards.filter((id) => COUNTERS[id]);
   return tech.length ? `<p class="note">Counters Scout will watch for: ${tech.map((id) => `${esc(nameOf(id))} (${esc(COUNTERS[id].why)})`).join('; ')}.</p>` : '';
+}
+function modelSummary(d) {
+  const un = d.cards.filter((id) => abilityKind(id) === 'unmodelled');
+  return un.length ? `<p class="note">Abilities not modelled yet (printed Power used): ${un.map((id) => esc(nameOf(id))).join(', ')}.</p>` : '';
 }
 function renderEditor() {
   $('slotCount').textContent = `${editing.cards.length}/12`;
@@ -588,7 +727,8 @@ function render() {
     renderPlayed();
     renderList(c);
     renderSearch();
-    $('footer').innerHTML = `${deckData.decks.length.toLocaleString()} decklists (${esc(deckData.source)}), cards and locations from Marvel Snap Zone, fetched ${esc(deckData.fetched)}.<br>Lane totals you enter already include effects on the board. Threats use printed power plus location effects; card abilities are not modelled. Your saved decks stay on this device.`;
+    scheduleWin(c);
+    $('footer').innerHTML = `${deckData.decks.length.toLocaleString()} decklists (${esc(deckData.source)}), cards and locations from Marvel Snap Zone, fetched ${esc(deckData.fetched)}.<br>Lane totals are worked out from the cards on the board with their abilities and the locations; use − / + to correct anything Scout doesn’t model. The win chance plays the game out from here many times and is a guide, not a guarantee. Your saved decks stay on this device.`;
   }
   save();
 }
@@ -608,6 +748,85 @@ $('undo').addEventListener('click', () => {
   $('toast').classList.remove('show');
 });
 const snapshot = () => JSON.parse(JSON.stringify({ state, decks }));
+
+// Remove an event and everything that refers to the card it made.
+function removeEvent(uid) {
+  state.events = state.events.filter((e) => e.uid !== uid && !(e.t !== 'play' && e.t !== 'add' && e.t !== 'log' && String(e.uid).startsWith(uid)));
+}
+
+// ---- Action sheet: place / move / edit -----------------------------------
+const act = { kind: null, id: null, uid: null, side: null };
+function laneButtons(prefix, current, side) {
+  const c = compute();
+  return `<div class="act-row">${[0, 1, 2].map((i) => {
+    const L = c.lanes[i];
+    const full = (side === 'opp' ? L.oppCards : L.myCards) >= 4;
+    return `<button class="btn ${i === current ? '' : 'primary'}" data-${prefix}="${i}" ${i === current || full ? 'disabled' : ''}>${esc(locName(i))}<small>${full ? 'full' : `${L.mine} – ${L.theirs}`}</small></button>`;
+  }).join('')}</div>`;
+}
+function openPlace(side, id) {
+  Object.assign(act, { kind: 'place', side, id, uid: null });
+  const c = cards.get(id);
+  $('actTitle').textContent = side === 'opp' ? 'Where did they play it?' : 'Where are you playing it?';
+  const handTxt = state.mine[id] === 'hand' ? 'Not in my hand' : 'Mark in my hand';
+  $('actBody').innerHTML = `<div class="act-card">${artHtml(c?.art, nameOf(id))}<div><b>${esc(nameOf(id))}</b> <span class="cp"><span class="cost">${c?.cost ?? '?'}</span><span class="pow">${c?.power ?? '?'}</span></span><p>${esc(abilityNote(id))}</p></div></div>
+    ${laneButtons('placeat', null, side)}
+    ${side === 'opp' ? '<button class="btn" data-placeat="log" style="width:100%">Seen, but don’t place it</button>' : `<button class="btn" data-toggleHand="1" style="width:100%">${handTxt}</button>`}`;
+  $('actSheet').showModal();
+}
+function openChip(uid) {
+  const c = compute();
+  const card = c.board.cards.find((x) => x.uid === uid);
+  if (!card) return;
+  Object.assign(act, { kind: 'chip', uid, id: card.id, side: card.side });
+  const info = cards.get(card.id);
+  const evt = state.events.find((e) => e.uid === uid);
+  $('actTitle').textContent = `${card.side === 'opp' ? 'Their' : 'Your'} ${nameOf(card.id)}`;
+  $('actBody').innerHTML = `<div class="act-card">${artHtml(info?.art, nameOf(card.id))}<div><b>${esc(nameOf(card.id))}</b> at ${esc(locName(card.lane))}${card.created ? ' · created' : ''}<p>${esc(abilityNote(card.id))}${card.moves ? ` Moved ${plural(card.moves, 'time')}.` : ''}</p></div></div>
+    <div class="act-label">Moved to</div>
+    ${laneButtons('moveto', card.lane, card.side)}
+    <div class="act-label">Power</div>
+    <div class="pw-edit"><button class="btn" data-buff="-1">−1</button><b class="tnum">${c.board.power(card)}</b><button class="btn" data-buff="1">+1</button><button class="btn" data-buff="5">+5</button></div>
+    <div class="act-label">Other</div>
+    <div class="deck-actions"><button class="btn danger" data-kill="1">Destroyed</button>${evt ? '<button class="btn" data-remove-ev="1">Remove (entered by mistake)</button>' : ''}</div>`;
+  $('actSheet').showModal();
+}
+$('actClose').addEventListener('click', () => $('actSheet').close());
+$('actSheet').addEventListener('click', (e) => {
+  if (e.target === $('actSheet')) return $('actSheet').close();
+  const t = e.target.closest('button');
+  if (!t || t.disabled) return;
+  const d = t.dataset;
+  const prev = snapshot();
+  if (d.placeat !== undefined) {
+    const uid = newUid();
+    if (d.placeat === 'log') state.events.push({ t: 'log', uid, side: act.side, id: act.id, turn: state.turn });
+    else {
+      state.events.push({ t: 'play', uid, side: act.side, id: act.id, lane: Number(d.placeat), turn: state.turn });
+      if (act.side === 'me') delete state.mine[act.id];
+    }
+    const lane = d.placeat === 'log' ? '' : ` at ${locName(Number(d.placeat))}`;
+    toast(`${act.side === 'opp' ? 'They' : 'You'} played ${nameOf(act.id)}${lane}`, prev);
+    $('search').value = '';
+  } else if (d.togglehand) {
+    if (state.mine[act.id] === 'hand') delete state.mine[act.id]; else state.mine[act.id] = 'hand';
+  } else if (d.moveto !== undefined) {
+    state.events.push({ t: 'move', uid: act.uid, lane: Number(d.moveto), turn: state.turn });
+    toast(`${nameOf(act.id)} moved to ${locName(Number(d.moveto))}`, prev);
+  } else if (d.buff) {
+    state.events.push({ t: 'buff', uid: act.uid, delta: Number(d.buff) });
+    render();
+    return openChip(act.uid);
+  } else if (d.kill) {
+    state.events.push({ t: 'destroy', uid: act.uid, turn: state.turn });
+    toast(`${nameOf(act.id)} destroyed`, prev);
+  } else if (d.removeEv) {
+    removeEvent(act.uid);
+    toast(`Removed ${nameOf(act.id)}`, prev);
+  } else return;
+  $('actSheet').close();
+  render();
+});
 
 // ---- Location sheet -----------------------------------------------------
 let sheetLane = 0;
@@ -634,108 +853,11 @@ $('locSheet').addEventListener('click', (e) => {
   const b = e.target.closest('[data-pick]');
   if (!b) return;
   state.lanes[sheetLane].loc = b.dataset.pick;
+  state.lanes[sheetLane].used = false;
   $('locSheet').close();
   render();
 });
 
-// ---- Events -------------------------------------------------------------
-document.body.addEventListener('click', (e) => {
-  const t = e.target.closest('button');
-  if (!t || t.closest('dialog') || t.id === 'undo') return;
-  const d = t.dataset;
-  if (t.id === 'tabGame' || d.go === 'game') { view = 'game'; editing = null; }
-  else if (t.id === 'tabDecks' || d.go === 'decks') { view = 'decks'; if (!decks.list.length) startEdit(); }
-  else if (d.add) {
-    if (state.played.length >= 12) return toast('Opponent already has 12 cards played.');
-    const prev = snapshot();
-    state.played.push(d.add);
-    $('search').value = '';
-    toast(`Added ${nameOf(d.add)}`, prev);
-  } else if (d.remove !== undefined) {
-    const prev = snapshot();
-    const [id] = state.played.splice(Number(d.remove), 1);
-    toast(`Removed ${nameOf(id)}`, prev);
-  } else if (d.addcard !== undefined) return openCardSheet(Number(d.addcard));
-  else if (d.used !== undefined) state.lanes[d.used].used = !state.lanes[d.used].used;
-  else if (d.unextra) {
-    const prev = snapshot();
-    const [i, k] = d.unextra.split(':').map(Number);
-    const lane = state.lanes[i];
-    const [x] = lane.extras.splice(k, 1);
-    const [pw, n] = x.side === 'opp' ? ['theirs', 'oppCards'] : ['mine', 'myCards'];
-    lane[pw] -= x.power;
-    lane[n] = Math.max(0, lane[n] - 1);
-    toast(`Removed ${nameOf(x.id)} (−${x.power})`, prev);
-  } else if (d.myx) {
-    const key = `x:${d.myx}`;
-    if (state.mine[key] === 'played') {
-      const prev = snapshot();
-      const x = state.myExtra.find((e) => e.key === d.myx);
-      state.myExtra = state.myExtra.filter((e) => e.key !== d.myx);
-      delete state.mine[key];
-      toast(`Removed ${nameOf(x.id)}`, prev);
-    } else state.mine[key] = 'played';
-  } else if (d.mine) {
-    const next = { deck: 'hand', hand: 'played', played: 'deck' }[state.mine[d.mine] || 'deck'];
-    if (next === 'deck') delete state.mine[d.mine]; else state.mine[d.mine] = next;
-  } else if (d.step) {
-    const [k, delta] = d.step.split(':');
-    const n = Number(delta);
-    if (k === 'turn') { state.turn = Math.min(7, Math.max(1, state.turn + n)); state.energy = null; state.hand = null; }
-    else if (k === 'energy') state.energy = Math.min(15, Math.max(0, energy() + n));
-    else state.hand = Math.min(7, Math.max(0, handSize() + n));
-  } else if (d.pw) {
-    const [i, side, delta] = d.pw.split(':');
-    state.lanes[i][side] = (state.lanes[i][side] || 0) + Number(delta);
-  } else if (d.pip) {
-    const [i, side, k] = d.pip.split(':');
-    const key = side === 'opp' ? 'oppCards' : 'myCards';
-    const n = Number(k);
-    state.lanes[i][key] = state.lanes[i][key] === n ? n - 1 : n;
-  } else if (d.loc !== undefined) return openSheet(Number(d.loc));
-  else if (d.sort) state.sort = d.sort;
-  else if (t.id === 'more') state.showAll = !state.showAll;
-  else if (t.id === 'reset') {
-    const prev = snapshot();
-    state = { ...fresh(), sort: state.sort };
-    toast('New game', prev);
-  }
-  // Decks
-  else if (t.id === 'newDeck') startEdit();
-  else if (d.edit) startEdit(decks.list.find((x) => x.id === d.edit));
-  else if (d.use) { decks.active = d.use; state.mine = {}; toast('Deck in use for the next game'); }
-  else if (d.copy) {
-    const deck = decks.list.find((x) => x.id === d.copy);
-    const code = deckCode(deck.cards);
-    navigator.clipboard?.writeText(code).then(() => toast('Deck code copied'), () => toast('Couldn’t copy; long-press to copy instead'));
-  } else if (d.del) {
-    const prev = snapshot();
-    decks.list = decks.list.filter((x) => x.id !== d.del);
-    if (decks.active === d.del) decks.active = decks.list[0]?.id || null;
-    toast('Deck deleted', prev);
-  } else if (d.slot) { if (editing.cards.length < 12) editing.cards.push(d.slot); $('deckSearch').value = ''; }
-  else if (d.unslot !== undefined) editing.cards.splice(Number(d.unslot), 1);
-  else if (t.id === 'importDeck') {
-    const r = parseDeck($('deckPaste').value, cardData.cards);
-    if (!r.cards.length) { $('importNote').className = 'note err'; $('importNote').textContent = 'Couldn’t read that. Paste the code from Marvel Snap’s Copy button, or card names one per line.'; return; }
-    editing.cards = r.cards;
-    if (r.name && !$('deckName').value) $('deckName').value = r.name;
-    $('importNote').className = r.unknown.length ? 'note err' : 'note';
-    $('importNote').textContent = `Imported ${plural(r.cards.length, 'card')}.${r.unknown.length ? ` Not recognised: ${r.unknown.join(', ')}.` : ''}`;
-    $('deckPaste').value = '';
-  } else if (t.id === 'saveDeck') {
-    if (!editing.cards.length) { $('importNote').className = 'note err'; $('importNote').textContent = 'Add at least one card first.'; return; }
-    const name = $('deckName').value.trim() || `Deck ${decks.list.length + 1}`;
-    const deck = { id: editing.id || `d${Date.now().toString(36)}`, name, cards: editing.cards };
-    const i = decks.list.findIndex((x) => x.id === deck.id);
-    if (i >= 0) decks.list[i] = deck; else decks.list.push(deck);
-    if (!decks.active || !decks.list.some((x) => x.id === decks.active)) decks.active = deck.id;
-    editing = null;
-    toast(`Saved ${name}`);
-  } else if (t.id === 'cancelDeck') editing = null;
-  else return;
-  render();
-});
 // ---- Add-card sheet: created, transformed or random cards ----------------
 const sheet = { lane: 0, side: 'opp', filterOn: false, sel: null, creates: null };
 function openCardSheet(i) {
@@ -746,7 +868,7 @@ function openCardSheet(i) {
   sheet.side = sheet.creates?.sides[0] || 'opp';
   sheet.filterOn = !!sheet.creates?.filter;
   sheet.sel = null;
-  $('cardSheetTitle').textContent = sheet.creates?.ask || `Add a card at Location ${i + 1}`;
+  $('cardSheetTitle').textContent = sheet.creates?.ask || `Add a card at ${locName(i)}`;
   $('cardFilter').hidden = !sheet.creates?.filter;
   $('cardFilter').textContent = sheet.creates?.hint ? `Only ${sheet.creates.hint}` : '';
   $('cardSearch').value = '';
@@ -785,16 +907,13 @@ $('cardSheet').addEventListener('click', (e) => {
     const power = Number($('cardPower').value) || 0;
     const name = nameOf(sheet.sel);
     if (sheet.side === 'hand') {
-      state.myExtra.push({ key: Date.now().toString(36), id: sheet.sel, power });
+      state.myExtra.push({ key: newUid(), id: sheet.sel, power });
       toast(`${name} added to your hand`, prev);
     } else {
       const lane = state.lanes[sheet.lane];
-      const [pw, n] = sheet.side === 'opp' ? ['theirs', 'oppCards'] : ['mine', 'myCards'];
-      lane.extras.push({ id: sheet.sel, side: sheet.side, power });
-      lane[pw] += power;
-      lane[n] = Math.min(4, lane[n] + 1);
+      state.events.push({ t: 'add', uid: newUid(), side: sheet.side, id: sheet.sel, lane: sheet.lane, turn: state.turn, power });
       if (locationEffect(lane.loc)?.once) lane.used = true;
-      toast(`${name} +${power} on ${sheet.side === 'opp' ? 'their' : 'your'} side`, prev);
+      toast(`${name} (${power}) on ${sheet.side === 'opp' ? 'their' : 'your'} side`, prev);
     }
     $('cardSheet').close();
     render();
@@ -803,6 +922,102 @@ $('cardSheet').addEventListener('click', (e) => {
   renderCardSheet();
 });
 
+// ---- Events -------------------------------------------------------------
+document.body.addEventListener('click', (e) => {
+  const t = e.target.closest('button');
+  if (!t || t.closest('dialog') || t.id === 'undo') return;
+  const d = t.dataset;
+  if (t.id === 'tabGame' || d.go === 'game') { view = 'game'; editing = null; }
+  else if (t.id === 'tabDecks' || d.go === 'decks') { view = 'decks'; if (!decks.list.length) startEdit(); }
+  else if (d.add) {
+    if (oppDeckEvents().length >= 12) return toast('Opponent already has 12 cards seen.');
+    return openPlace('opp', d.add);
+  } else if (d.mine) {
+    const ev = myPlays().find((x) => x.id === d.mine);
+    if (ev) return openChip(ev.uid);
+    return openPlace('me', d.mine);
+  } else if (d.myx) {
+    const x = state.myExtra.find((y) => y.key === d.myx);
+    if (!x) return;
+    if (x.played) { const prev = snapshot(); state.myExtra = state.myExtra.filter((y) => y !== x); toast(`Removed ${nameOf(x.id)}`, prev); }
+    else return openPlaceExtra(x);
+  } else if (d.chip) return openChip(d.chip);
+  else if (d.unevent) { const prev = snapshot(); const ev = state.events.find((x) => x.uid === d.unevent); removeEvent(d.unevent); toast(`Removed ${nameOf(ev?.id)}`, prev); }
+  else if (d.adj) {
+    const [i, key, delta] = d.adj.split(':');
+    state.lanes[i][key] += Number(delta);
+  } else if (d.addcard !== undefined) return openCardSheet(Number(d.addcard));
+  else if (d.used !== undefined) state.lanes[d.used].used = !state.lanes[d.used].used;
+  else if (d.step) {
+    const [k, delta] = d.step.split(':');
+    const n = Number(delta);
+    if (k === 'turn') { state.turn = Math.min(7, Math.max(1, state.turn + n)); state.energy = null; state.hand = null; }
+    else if (k === 'energy') state.energy = Math.min(15, Math.max(0, energy() + n));
+    else state.hand = Math.min(7, Math.max(0, handSize() + n));
+  } else if (d.loc !== undefined) return openSheet(Number(d.loc));
+  else if (d.sort) state.sort = d.sort;
+  else if (t.id === 'more') state.showAll = !state.showAll;
+  else if (t.id === 'reset') {
+    const prev = snapshot();
+    state = { ...fresh(), sort: state.sort };
+    toast('New game', prev);
+  }
+  // Decks
+  else if (t.id === 'newDeck') startEdit();
+  else if (d.edit) startEdit(decks.list.find((x) => x.id === d.edit));
+  else if (d.use) { decks.active = d.use; state.mine = {}; toast('Deck in use for the next game'); }
+  else if (d.copy) {
+    const deck = decks.list.find((x) => x.id === d.copy);
+    navigator.clipboard?.writeText(deckCode(deck.cards)).then(() => toast('Deck code copied'), () => toast('Couldn’t copy; try again'));
+  } else if (d.del) {
+    const prev = snapshot();
+    decks.list = decks.list.filter((x) => x.id !== d.del);
+    if (decks.active === d.del) decks.active = decks.list[0]?.id || null;
+    toast('Deck deleted', prev);
+  } else if (d.slot) { if (editing.cards.length < 12) editing.cards.push(d.slot); $('deckSearch').value = ''; }
+  else if (d.unslot !== undefined) editing.cards.splice(Number(d.unslot), 1);
+  else if (t.id === 'importDeck') {
+    const r = parseDeck($('deckPaste').value, cardData.cards);
+    if (!r.cards.length) { $('importNote').className = 'note err'; $('importNote').textContent = 'Couldn’t read that. Paste the code from Marvel Snap’s Copy button, or card names one per line.'; return; }
+    editing.cards = r.cards;
+    if (r.name && !$('deckName').value) $('deckName').value = r.name;
+    $('importNote').className = r.unknown.length ? 'note err' : 'note';
+    $('importNote').textContent = `Imported ${plural(r.cards.length, 'card')}.${r.unknown.length ? ` Not recognised: ${r.unknown.join(', ')}.` : ''}`;
+    $('deckPaste').value = '';
+  } else if (t.id === 'saveDeck') {
+    if (!editing.cards.length) { $('importNote').className = 'note err'; $('importNote').textContent = 'Add at least one card first.'; return; }
+    const name = $('deckName').value.trim() || `Deck ${decks.list.length + 1}`;
+    const deck = { id: editing.id || `d${Date.now().toString(36)}`, name, cards: editing.cards };
+    const i = decks.list.findIndex((x) => x.id === deck.id);
+    if (i >= 0) decks.list[i] = deck; else decks.list.push(deck);
+    if (!decks.active || !decks.list.some((x) => x.id === decks.active)) decks.active = deck.id;
+    editing = null;
+    toast(`Saved ${name}`);
+  } else if (t.id === 'cancelDeck') editing = null;
+  else return;
+  render();
+});
+
+// Created cards in my hand: play them like any other card.
+function openPlaceExtra(x) {
+  Object.assign(act, { kind: 'place', side: 'me', id: x.id, uid: null });
+  $('actTitle').textContent = 'Where are you playing it?';
+  $('actBody').innerHTML = `<div class="act-card">${artHtml(cards.get(x.id)?.art, nameOf(x.id))}<div><b>${esc(nameOf(x.id))}</b> · ${x.power} power<p>Created card in your hand.</p></div></div>${laneButtons('playx', null, 'me')}`;
+  $('actSheet').showModal();
+  $('actBody').onclick = (e) => {
+    const t = e.target.closest('[data-playx]');
+    if (!t || t.disabled) return;
+    const prev = snapshot();
+    state.events.push({ t: 'add', uid: newUid(), side: 'me', id: x.id, lane: Number(t.dataset.playx), turn: state.turn, power: x.power });
+    x.played = true;
+    toast(`You played ${nameOf(x.id)}`, prev);
+    $('actBody').onclick = null;
+    $('actSheet').close();
+    render();
+  };
+}
+$('actSheet').addEventListener('close', () => { $('actBody').onclick = null; });
+
 function startEdit(deck) {
   editing = deck ? { id: deck.id, cards: [...deck.cards] } : { id: null, cards: [] };
   $('deckName').value = deck?.name || '';
@@ -810,14 +1025,6 @@ function startEdit(deck) {
   $('deckSearch').value = '';
   $('importNote').textContent = '';
 }
-document.addEventListener('change', (e) => {
-  const lane = e.target.dataset?.lane;
-  if (!lane) return;
-  const [i, side] = lane.split(':');
-  state.lanes[i][side] = Number(e.target.value) || 0;
-  render();
-});
-document.addEventListener('focusin', (e) => { if (e.target.dataset?.lane) e.target.select(); });
 $('search').addEventListener('input', renderSearch);
 $('deckSearch').addEventListener('input', renderEditor);
 render();
