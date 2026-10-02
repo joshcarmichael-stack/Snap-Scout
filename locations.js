@@ -237,6 +237,10 @@ export const LOCATION_EFFECTS = {
   ZennLa: none('Adds a 3-Cost card from deck here.'),
 };
 
+// "Cards here have …" effects: applied live to whatever is there (the board
+// engine), rather than once when a card is played.
+for (const id of ['Nidavellir', 'Xandar', 'SewerSystem', 'Necrosha', 'NegativeZone', 'LakeHellas', 'WashingtonDC', 'Atlantis', 'SmithsonianMuseum', 'Panoptichron']) LOCATION_EFFECTS[id].ongoing = true;
+
 // "Next card here" effects: once the lane is marked used, they stop applying.
 for (const id of ['BlackVortex', 'Vormir', 'CastleZemo', 'AuntMays']) LOCATION_EFFECTS[id].once = true;
 

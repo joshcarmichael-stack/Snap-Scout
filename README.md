@@ -4,6 +4,14 @@ Predicts which cards your Marvel Snap opponent is holding, from the cards they'v
 
 Open `index.html` through any static server (e.g. `python3 -m http.server`). Everything runs in the browser.
 
+## How a game is tracked
+
+Tap a card, then tap the location it went to (your cards from the deck strip, theirs from the prediction list). Tap a card on the board to move it, correct its power, or mark it destroyed. The game is stored as an ordered log of plays, moves, destroys and edits; `engine.js` replays it with card abilities (`abilities.js`) and location effects to work out every lane total. Abilities trigger automatically: Iron Fist moves your next card left, Human Torch doubles on every move, Ghost-Spider pulls your last card, Wong repeats On Reveals, Arnim Zola copies, and so on. Cards Scout can't model count at printed power and are flagged; − / + on a lane total corrects anything it misses.
+
+## Win chance and snapping
+
+`sim.js` plays the rest of the game out ~160 times from the current board: the opponent's unseen cards are sampled from the prediction model, your remaining deck is shuffled (or your marked hand used), and both sides commit their plays blind each turn, choosing among their most energy-efficient options by what they actually do on the board. The share of playouts you win gives the call: Snap (70%+), Lean snap (55%+), Play it out (40%+), Don't snap / retreat if they snap (25%+), Retreat (below). Mirror matches come out at ~50%. The playouts use simple play logic and only the modelled abilities, so treat it as a guide.
+
 ## How it predicts
 
 - **Card co-occurrence** (`model.js`): from about 10k tracked decklists weighted by games played, each card's probability of being in the deck is its baseline frequency shifted by the log-lift of every card seen so far. Smoothing stops rare cards overreacting, and the probabilities are rescaled to sum to the number of unseen cards.
