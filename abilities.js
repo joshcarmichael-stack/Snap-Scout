@@ -1,3 +1,5 @@
+import { MORE_ABILITIES, addAliases } from './abilities-more.js';
+
 // Card abilities the board engine applies. Hooks (all optional):
 //   reveal(g, c)                  On Reveal (repeated by Wong, blocked by Cosmo…)
 //   ongoing(g, c, add)            live effect; call add(card, n) for each card it buffs
@@ -135,10 +137,10 @@ export const ABILITIES = {
   },
   JeffTheBabyDolphin: { kind: 'modelled', note: 'Your cards played here get +1.', allyPlayedHere: (g, c, played) => g.buff(played, 1) },
   ElsaBloodstone: { kind: 'modelled', note: 'Cards that fill your side of a location get +2.', allyPlayedHere: (g, c, played) => { if (g.at(played.lane, played.side).length === 4) g.buff(played, 2); } },
-  LukeCage: { kind: 'approx', note: 'Front-row cards can’t be reduced; not applied.' },
+  LukeCage: { kind: 'modelled', note: 'Your front-row cards can’t lose Power.' },
   Speed: { kind: 'approx', note: '+1 per turn you spent all energy; not tracked.' },
-  SuperiorIronMan: { kind: 'approx', note: 'Doubles Power increases to itself; not applied.' },
-  ScorpionBrandNewDay: { kind: 'approx', note: 'Doubles Power reductions on enemies; not applied.' },
+  SuperiorIronMan: { kind: 'modelled', note: 'Power increases to it are doubled.' },
+  ScorpionBrandNewDay: { kind: 'modelled', note: 'Power reductions on enemy cards are doubled.' },
 
   // ---- "Next card" effects -------------------------------------------------
   Forge: { kind: 'modelled', note: 'Your next card gets +2.', reveal: (g, c) => pend(g, c, 'Forge: next card +2', (g2, p) => g2.buff(p, 2)) },
@@ -208,7 +210,6 @@ export const ABILITIES = {
   Gladiator: { kind: 'approx', note: 'Adds an enemy card from their deck: log it with "+ Add card".' },
   // ---- More meta cards ----------------------------------------------------
   AntMan: { kind: 'modelled', note: '+4 with a full side here.', ongoing: (g, c, add) => { if (g.full(c.lane, c.side)) add(c, 4); } },
-  Kraven: { kind: 'modelled', note: '+2 when a card moves here.', moveIn: true },
   Sage: { kind: 'modelled', note: '+2 for each different Power among other cards here.', reveal: (g, c) => g.buff(c, 2 * new Set(g.at(c.lane).filter((x) => x !== c).map((x) => g.power(x))).size) },
   SquirrelGirl: { kind: 'modelled', note: 'Adds a 1-Power Squirrel to each other location.', reveal: (g, c) => [0, 1, 2].filter((l) => l !== c.lane).forEach((l) => g.spawn(c.side, 'Squirrel', l, 1, c.uid)) },
   FinFangFoom: { kind: 'approx', note: 'Gains the Power of the strongest enemy card here.', reveal: (g, c) => { const t = enemy(g, c).sort(byPower(g))[0]; if (t) g.buff(c, g.power(t)); } },
@@ -251,3 +252,7 @@ export const ABILITIES = {
   Modok: none('Discards your hand.'),
   TheAncientOne: none('Adds Tao Mandala to hand.'),
 };
+
+// The rest of the card pool, then Champion/team variants of base cards.
+for (const [id, rule] of Object.entries(MORE_ABILITIES)) if (!ABILITIES[id]) ABILITIES[id] = rule;
+addAliases(ABILITIES);
