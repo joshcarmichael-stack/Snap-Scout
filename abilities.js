@@ -1,4 +1,5 @@
 import { MORE_ABILITIES, addAliases } from './abilities-more.js';
+import { ZONE_ABILITIES } from './abilities-zones.js';
 
 // Card abilities the board engine applies. Hooks (all optional):
 //   reveal(g, c)                  On Reveal (repeated by Wong, blocked by Cosmo…)
@@ -255,4 +256,6 @@ export const ABILITIES = {
 
 // The rest of the card pool, then Champion/team variants of base cards.
 for (const [id, rule] of Object.entries(MORE_ABILITIES)) if (!ABILITIES[id]) ABILITIES[id] = rule;
+// Hand / deck / discard / cost / energy rules replace the simpler entries.
+Object.assign(ABILITIES, ZONE_ABILITIES);
 addAliases(ABILITIES);

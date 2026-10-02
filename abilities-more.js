@@ -17,6 +17,13 @@ const cost = (g, x) => g.info(x).cost;
 const text = (g, x) => g.info(x).ability || '';
 const pend = (g, c, label, fn) => g.pending.push({ side: c.side, src: c.uid, label, fn });
 const freeLane = (g, side, not) => [0, 1, 2].filter((l) => l !== not && !g.full(l, side)).sort((a, b) => g.at(a, side).length - g.at(b, side).length)[0];
+// Borrowing another card's Ongoing (Moonstone, Super-Skrull) can chain through
+// copies of each other; cap the depth like the game's loop limit.
+const borrowOngoing = (g, c, x, add) => {
+  if ((g.ongDepth || 0) >= 3) return;
+  g.ongDepth = (g.ongDepth || 0) + 1;
+  try { g.abilityOf(x)?.ongoing?.(g, c, add); } finally { g.ongDepth--; }
+};
 const winning = (g, c) => { g.computeLive(); return g.sideTotal(c.lane, c.side) > g.sideTotal(c.lane, other(c.side)); };
 
 const M = (note, hooks) => ({ kind: 'modelled', note, ...hooks });
@@ -158,8 +165,8 @@ export const MORE_ABILITIES = {
   Muse: A('+3 per location where your card was destroyed.', { ongoing: (g, c, add) => add(c, 3 * new Set(g.board.filter((x) => x.side === c.side && x.gone === 'destroyed').map((x) => x.lane)).size) }),
   WildChild: A('+4 if one of your cards was destroyed (discards not tracked).', { ongoing: (g, c, add) => { if (g.board.some((x) => x.side === c.side && x.gone === 'destroyed')) add(c, 4); } }),
   Ozymandias: M('Your Rocks have +3.', { ongoing: (g, c, add) => allies(g, c).filter((x) => x.id === 'Rock').forEach((x) => add(x, 3)) }),
-  Moonstone: A('Has the Ongoing effects of your 3-Cost or less cards here.', { ongoing: (g, c, add) => mine(g, c).filter((x) => cost(g, x) <= 3).forEach((x) => g.abilityOf(x)?.ongoing?.(g, c, add)) }),
-  SuperSkrull: A('Has the Ongoing effects of all enemy cards.', { ongoing: (g, c, add) => foes(g, c).forEach((x) => g.abilityOf(x)?.ongoing?.(g, c, add)) }),
+  Moonstone: A('Has the Ongoing effects of your 3-Cost or less cards here.', { ongoing: (g, c, add) => mine(g, c).filter((x) => cost(g, x) <= 3).forEach((x) => borrowOngoing(g, c, x, add)) }),
+  SuperSkrull: A('Has the Ongoing effects of all enemy cards.', { ongoing: (g, c, add) => foes(g, c).forEach((x) => borrowOngoing(g, c, x, add)) }),
   AntMan: M('+4 with a full side here.', { ongoing: (g, c, add) => { if (g.full(c.lane, c.side)) add(c, 4); } }),
   CyclopsXMen: A('Gains the most energy you had in a turn (counted as the turn number).', { ongoing: (g, c, add) => add(c, Math.min(6, g.turn)) }),
   StrongGuy: A('+6 with 1 or fewer cards in hand (not tracked).', {}),

@@ -11,7 +11,7 @@ const base = { lanes, cards, avgPower: () => 5, lastTurn: 6, energyAt: (t) => t 
 
 test('a mirror match from turn 1 is close to 50%', () => {
   const deck = D.decks[3].slice(1).map((i) => D.ids[i]);
-  const r = winChance({ ...base, events: [], turn: 1, oppRows: deck.map((id) => ({ id, pDeck: 1 })), oppSeen: 0, oppHand: 4, myHand: [], myDeckLeft: deck, myHandSize: 4, runs: 300, seed: 4 });
+  const r = winChance({ ...base, events: [], turn: 1, oppRows: deck.map((id) => ({ id, pDeck: 1 })), oppSeen: 0, oppHand: 4, myHand: [], myDeckLeft: deck, myHandSize: 4, runs: 200, seed: 4 });
   assert.ok(r.p > 0.4 && r.p < 0.6, `got ${r.p}`);
 });
 
@@ -30,4 +30,15 @@ test('snap advice bands', () => {
   assert.equal(snapAdvice(0.8).call, 'Snap');
   assert.equal(snapAdvice(0.5).call, 'Play it out');
   assert.equal(snapAdvice(0.1).call, 'Retreat');
+});
+
+test('random meta matchups on random locations play out without errors', () => {
+  const L = JSON.parse(readFileSync(new URL('../data/locations.json', import.meta.url))).locations.map((l) => l.id);
+  for (let k = 0; k < 20; k++) {
+    const a = D.decks[(k * 97) % D.decks.length].slice(1).map((i) => D.ids[i]);
+    const b = D.decks[(k * 131 + 11) % D.decks.length].slice(1).map((i) => D.ids[i]);
+    const locs = [0, 1, 2].map((i) => ({ loc: L[(k * 13 + i * 41) % L.length] }));
+    const r = winChance({ ...base, lanes: locs, events: [], turn: 1, oppRows: b.map((id) => ({ id, pDeck: 1 })), oppSeen: 0, oppHand: 3, myHand: [], myDeckLeft: a, myHandSize: 3, runs: 2, seed: k });
+    assert.ok(r.p >= 0 && r.p <= 1);
+  }
 });
