@@ -67,12 +67,25 @@ test('Grandmaster + Odin repeats stop instead of looping forever', () => {
   assert.ok(b.active.length >= 2);
 });
 
-test('every top-150 meta card with an ability has a rule', async () => {
+test('every card with an ability has a rule', async () => {
   const { ABILITIES } = await import('../abilities.js');
-  const d = JSON.parse(readFileSync(new URL('../data/decks.json', import.meta.url)));
-  const w = new Map();
-  for (const x of d.decks) for (let i = 1; i <= 12; i++) w.set(d.ids[x[i]], (w.get(d.ids[x[i]]) || 0) + x[0]);
-  const top = [...w].sort((a, b) => b[1] - a[1]).slice(0, 150).map(([id]) => id);
-  const missing = top.filter((id) => cards.get(id)?.special && !ABILITIES[id]);
-  assert.deepEqual(missing, [], 'add these to abilities.js');
+  const missing = list.filter((c) => !c.generated && c.special && !ABILITIES[c.id]).map((c) => `${c.id}: ${c.ability}`);
+  assert.deepEqual(missing, [], 'add these to abilities-more.js');
+});
+
+test('card-pool rules: Hawkeye, Klaw, Starbrand, Nimrod, Angela', () => {
+  const h = run([play('me', 'Hawkeye', 0, 2), play('me', 'MistyKnight', 0, 3)]);
+  assert.deepEqual(totals(h), [8, 0, 0]);
+  assert.deepEqual(totals(run([play('me', 'Klaw', 0, 4)])), [2, 6, 0]);
+  assert.deepEqual(totals(run([play('me', 'Starbrand', 1, 3)]), 'opp'), [3, 0, 3]);
+  const nim = run([play('me', 'Nimrod', 0, 5), play('me', 'Deathlok', 0, 6)]);
+  assert.deepEqual(totals(nim), [6, 6, 6]);
+  assert.deepEqual(powerOf(run([play('me', 'Angela', 2, 2), play('me', 'MistyKnight', 2, 3), play('me', 'Cyclops', 2, 3)]), 'Angela'), [5]);
+});
+
+test('Luke Cage protects the front row; Scorpion doubles reductions', () => {
+  const luke = run([play('me', 'LukeCage', 0, 2), play('me', 'MistyKnight', 0, 2), play('opp', 'Hazmat', 1, 3)]);
+  assert.deepEqual(totals(luke), [5, 0, 0]);
+  const sc = run([play('opp', 'MistyKnight', 0, 2), play('me', 'ScorpionBrandNewDay', 1, 6), play('me', 'Hazmat', 2, 6)]);
+  assert.deepEqual(totals(sc, 'opp'), [1, 0, 0]);
 });

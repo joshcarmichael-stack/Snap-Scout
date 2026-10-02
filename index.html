@@ -340,7 +340,7 @@
 
 <dialog id="cardSheet">
   <div class="sheet-hd">
-    <div class="t"><span id="cardSheetTitle">Add a card</span><button id="cardClose">Close</button></div>
+    <div class="t"><span id="cardSheetTitle">Add a card</span><button id="cardCustom">Custom…</button><button id="cardClose">Close</button></div>
     <div class="seg" id="cardSides" role="group" aria-label="Where the card went">
       <button data-cside="opp">Their side</button><button data-cside="me">My side</button><button data-cside="hand">My hand</button>
     </div>
@@ -370,6 +370,30 @@ const [cardData, deckData, locData] = await Promise.all([
   fetch('data/locations.json').then((r) => r.json()),
 ]);
 const cards = new Map(cardData.cards.map((c) => [c.id, c]));
+
+// ---- Custom cards (Scarlet Witch skills, anything missing from the data) --
+const CUSTOM = 'snap-scout-custom';
+const EFFECTS = {
+  none: { label: 'No ability', note: () => 'No ability.' },
+  revealSelf: { label: 'On Reveal: +N to itself', note: (n) => `On Reveal: +${n} Power.`, rule: (n) => ({ reveal: (g, c) => g.buff(c, n) }) },
+  revealAlliesHere: { label: 'On Reveal: your other cards here +N', note: (n) => `On Reveal: your other cards here get +${n}.`, rule: (n) => ({ reveal: (g, c) => g.at(c.lane, c.side).filter((x) => x !== c).forEach((x) => g.buff(x, n)) }) },
+  revealAllies: { label: 'On Reveal: all your other cards +N', note: (n) => `On Reveal: your other cards get +${n}.`, rule: (n) => ({ reveal: (g, c) => g.active().filter((x) => x.side === c.side && x !== c).forEach((x) => g.buff(x, n)) }) },
+  revealEnemiesHere: { label: 'On Reveal: enemy cards here −N', note: (n) => `On Reveal: enemy cards here get −${n}.`, rule: (n) => ({ reveal: (g, c) => g.at(c.lane, c.side === 'me' ? 'opp' : 'me').forEach((x) => g.buff(x, -n)) }) },
+  ongoingAlliesHere: { label: 'Ongoing: your other cards here +N', note: (n) => `Ongoing: your other cards here have +${n}.`, rule: (n) => ({ ongoing: (g, c, add) => g.at(c.lane, c.side).filter((x) => x !== c).forEach((x) => add(x, n)) }) },
+  ongoingLane: { label: 'Ongoing: +N to your side here', note: (n) => `Ongoing: +${n} to your side here.`, rule: (n) => ({ ongoing: (g, c) => g.laneBonus(c.lane, c.side, n) }) },
+  destroyEnemyHere: { label: 'On Reveal: destroy their strongest card here', note: () => 'On Reveal: destroys the strongest enemy card here.', rule: () => ({ reveal: (g, c) => { const t = g.at(c.lane, c.side === 'me' ? 'opp' : 'me').sort((a, b) => g.power(b) - g.power(a))[0]; if (t) g.destroy(t); } }) },
+};
+let customCards = [];
+try { customCards = JSON.parse(localStorage.getItem(CUSTOM) || '[]'); } catch {}
+function registerCustom(def) {
+  const fx = EFFECTS[def.effect] || EFFECTS.none;
+  const card = { id: def.id, name: def.name, cost: def.cost, power: def.power, ability: fx.note(def.n), ongoing: def.effect.startsWith('ongoing'), special: def.effect !== 'none', art: '', tags: [], generated: true, custom: true };
+  const i = cardData.cards.findIndex((c) => c.id === def.id);
+  if (i >= 0) cardData.cards[i] = card; else cardData.cards.push(card);
+  cards.set(def.id, card);
+  if (fx.rule) ABILITIES[def.id] = { kind: 'modelled', note: `Custom: ${fx.note(def.n)}`, ...fx.rule(def.n) };
+}
+customCards.forEach(registerCustom);
 const locations = new Map(locData.locations.map((l) => [l.id, l]));
 const model = new Model(deckData.ids, deckData.decks);
 
@@ -787,6 +811,9 @@ function openChip(uid) {
     ${laneButtons('moveto', card.lane, card.side)}
     <div class="act-label">Power</div>
     <div class="pw-edit"><button class="btn" data-buff="-1">−1</button><b class="tnum">${c.board.power(card)}</b><button class="btn" data-buff="1">+1</button><button class="btn" data-buff="5">+5</button></div>
+    <div class="act-label">Ability</div>
+    <p class="note" style="margin-top:0">${textIdsFor(uid).length ? `Using: ${textIdsFor(uid).map((id) => esc(nameOf(id))).join(', ')}` : 'Its own ability.'} Random or copied text (Red Onslaught, Kang, Morph…)? Set what it has.</p>
+    <div class="deck-actions"><button class="btn" data-settext="1">Set its ability…</button>${textIdsFor(uid).length ? '<button class="btn" data-cleartext="1">Use its own</button>' : ''}</div>
     <div class="act-label">Other</div>
     <div class="deck-actions"><button class="btn danger" data-kill="1">Destroyed</button>${evt ? '<button class="btn" data-remove-ev="1">Remove (entered by mistake)</button>' : ''}</div>`;
   $('actSheet').showModal();
@@ -817,6 +844,12 @@ $('actSheet').addEventListener('click', (e) => {
     state.events.push({ t: 'buff', uid: act.uid, delta: Number(d.buff) });
     render();
     return openChip(act.uid);
+  } else if (d.settext) {
+    return openTextPicker(act.uid);
+  } else if (d.cleartext) {
+    state.events = state.events.filter((e) => !(e.t === 'text' && e.uid === act.uid));
+    render();
+    return openChip(act.uid);
   } else if (d.kill) {
     state.events.push({ t: 'destroy', uid: act.uid, turn: state.turn });
     toast(`${nameOf(act.id)} destroyed`, prev);
@@ -827,6 +860,62 @@ $('actSheet').addEventListener('click', (e) => {
   $('actSheet').close();
   render();
 });
+
+// ---- "Set its ability" for random / copied text ---------------------------
+function textIdsFor(uid) { return state.events.find((e) => e.t === 'text' && e.uid === uid)?.ids || []; }
+function openTextPicker(uid) {
+  const card = compute().board.cards.find((x) => x.uid === uid);
+  const multi = card?.id === 'RedOnslaught';
+  $('actTitle').textContent = multi ? 'Which Ongoing abilities did it get? (up to 3)' : 'Which card’s ability does it have?';
+  $('actBody').innerHTML = `<input type="search" class="field" id="textSearch" placeholder="Search cards…" autocomplete="off"><div class="results" id="textResults"></div>`;
+  const draw = () => {
+    const q = $('textSearch').value.trim().toLowerCase();
+    const chosen = textIdsFor(uid);
+    const list = cardData.cards.filter((c) => c.special && (!multi || /Ongoing/.test(c.ability)) && (!q || c.name.toLowerCase().includes(q))).slice(0, 40);
+    $('textResults').innerHTML = list.map((c) => resHtml(c, 'pick-text').replace('class="res"', `class="res ${chosen.includes(c.id) ? 'sel' : ''}"`)).join('') || '<div class="empty">No card matches.</div>';
+  };
+  $('textSearch').addEventListener('input', draw);
+  $('actBody').onclick = (e) => {
+    const t = e.target.closest('[data-pick-text]');
+    if (!t) return;
+    const id = t.dataset.pickText;
+    const ev = state.events.find((x) => x.t === 'text' && x.uid === uid);
+    const ids = multi ? [...new Set([...(ev?.ids || []), id])].slice(-3) : [id];
+    if (ev) ev.ids = ids; else state.events.push({ t: 'text', uid, ids });
+    render();
+    if (multi && ids.length < 3) return draw();
+    $('actBody').onclick = null;
+    openChip(uid);
+  };
+  draw();
+}
+
+// ---- Custom card form --------------------------------------------------------
+function openCustomForm() {
+  $('cardSheet').close();
+  $('actTitle').textContent = 'Custom card';
+  $('actBody').innerHTML = `<p class="note" style="margin-top:0">For cards Scout doesn’t know, like Scarlet Witch’s skills. Saved on this device for next time.</p>
+    <input class="field" id="cuName" placeholder="Name" autocomplete="off">
+    <div class="act-row" style="margin-top:8px"><label class="note">Cost<input class="field" id="cuCost" type="number" inputmode="numeric" value="0"></label><label class="note">Power<input class="field" id="cuPower" type="number" inputmode="numeric" value="0"></label><label class="note">N<input class="field" id="cuN" type="number" inputmode="numeric" value="2"></label></div>
+    <div class="act-label">Effect</div>
+    <div class="list">${Object.entries(EFFECTS).map(([k, v], i) => `<label class="res" style="min-height:40px"><input type="radio" name="cuFx" value="${k}" ${i === 0 ? 'checked' : ''}> ${esc(v.label)}</label>`).join('')}</div>
+    <div class="deck-actions"><button class="btn primary" id="cuSave">Save card</button></div>`;
+  $('actSheet').showModal();
+  $('cuSave').onclick = () => {
+    const name = $('cuName').value.trim();
+    if (!name) return $('cuName').focus();
+    const def = { id: `Custom_${name.replace(/[^A-Za-z0-9]/g, '')}`, name, cost: Number($('cuCost').value) || 0, power: Number($('cuPower').value) || 0, effect: document.querySelector('input[name="cuFx"]:checked').value, n: Number($('cuN').value) || 0 };
+    customCards = customCards.filter((c) => c.id !== def.id).concat(def);
+    try { localStorage.setItem(CUSTOM, JSON.stringify(customCards)); } catch {}
+    registerCustom(def);
+    $('actSheet').close();
+    sheet.sel = def.id;
+    sheet.filterOn = false;
+    $('cardSheet').showModal();
+    $('cardPower').value = def.power;
+    renderCardSheet();
+  };
+}
 
 // ---- Location sheet -----------------------------------------------------
 let sheetLane = 0;
@@ -883,7 +972,7 @@ function renderCardSheet() {
   const f = sheet.filterOn && sheet.creates?.filter;
   const list = cardData.cards
     .filter((c) => (!f || f(c)) && (!q || c.name.toLowerCase().includes(q)))
-    .sort((a, b) => (q ? a.name.toLowerCase().indexOf(q) - b.name.toLowerCase().indexOf(q) : 0) || (a.generated ? 1 : 0) - (b.generated ? 1 : 0) || a.name.localeCompare(b.name))
+    .sort((a, b) => (b.custom ? 1 : 0) - (a.custom ? 1 : 0) || (q ? a.name.toLowerCase().indexOf(q) - b.name.toLowerCase().indexOf(q) : 0) || (a.generated ? 1 : 0) - (b.generated ? 1 : 0) || a.name.localeCompare(b.name))
     .slice(0, 60);
   $('cardList').innerHTML = list.map((c) => resHtml(c, 'pickcard').replace('class="res"', `class="res ${sheet.sel === c.id ? 'sel' : ''}"`)).join('') || '<div class="empty">No card matches.</div>';
   const c = sheet.sel && cards.get(sheet.sel);
@@ -893,6 +982,7 @@ function renderCardSheet() {
 }
 $('cardSearch').addEventListener('input', renderCardSheet);
 $('cardClose').addEventListener('click', () => $('cardSheet').close());
+$('cardCustom').addEventListener('click', openCustomForm);
 $('cardSheet').addEventListener('click', (e) => {
   if (e.target === $('cardSheet')) return $('cardSheet').close();
   const t = e.target.closest('button');

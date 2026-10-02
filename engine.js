@@ -10,6 +10,7 @@
 //   { t: 'buff', uid, delta }                          manual power correction
 //   { t: 'destroy', uid, turn }
 //   { t: 'log', uid, side, id, turn }                  opponent card seen but not placed
+//   { t: 'text', uid, ids }                            the card has these abilities instead of its own
 // side is 'me' or 'opp'; lane is 0..2.
 
 import { ABILITIES } from './abilities.js';
@@ -19,6 +20,12 @@ export const other = (side) => (side === 'me' ? 'opp' : 'me');
 
 export function buildBoard(events, { cards, lanes, turn, avgPower = () => 0 }) {
   const g = new Game(cards, lanes, avgPower);
+  // Facts the replay needs ahead of time: which side played where each turn
+  // ("if your opponent played a card here this turn") and copied abilities.
+  for (const e of events) {
+    if (e.t === 'play' || e.t === 'add') g.playKeys.add(`${e.turn}|${e.side}|${e.lane}`);
+    if (e.t === 'text') g.texts.set(e.uid, e.ids);
+  }
   let curTurn = 1;
   for (const e of events) {
     while (curTurn < (e.turn ?? curTurn)) g.endOfTurn(curTurn++);
@@ -45,6 +52,8 @@ class Game {
     this.turn = 1;
     this.eotAdj = [0, 1, 2].map(() => ({ me: 0, opp: 0 }));
     this.copySeq = 0;
+    this.playKeys = new Set();
+    this.texts = new Map(); // uid -> ability ids the card has instead of its own
   }
 
   // ---- queries -------------------------------------------------------------
@@ -52,18 +61,50 @@ class Game {
   at(lane, side) { return this.active().filter((c) => c.lane === lane && (!side || c.side === side)); }
   info(c) { return this.cardsById.get(c.id) || { cost: 0, power: 0, ability: '' }; }
   power(c) { return c.base + c.buff + (c.live || 0); }
-  abilityOf(c) { return c.silenced ? null : ABILITIES[c.copiedText || c.id] || null; }
+  // A card's ability: its own, a copied one (Mystique, Rogue…), or several
+  // (Red Onslaught, or ones you set by hand) combined.
+  textIds(c) { return c.texts || [c.copiedText || c.id]; }
+  has(c, id) { return !c.silenced && !c.gone && this.textIds(c).includes(id); }
+  abilityOf(c) {
+    if (c.silenced) return null;
+    const ids = this.textIds(c);
+    if (ids.length === 1) return ABILITIES[ids[0]] || null;
+    const parts = ids.map((id) => ABILITIES[id]).filter(Boolean);
+    const merged = {};
+    for (const hook of ['reveal', 'ongoing', 'move', 'destroyed', 'eot', 'allyPlayedHere', 'allyPlayed', 'anyPlayedHere', 'cardMovedHere', 'allyDestroyed']) {
+      const fns = parts.map((p) => p[hook]).filter(Boolean);
+      if (fns.length) merged[hook] = (...a) => fns.forEach((f) => f(...a));
+    }
+    return merged;
+  }
+  oppPlayedHere(c) { return this.playKeys.has(`${this.turn}|${c.side === 'me' ? 'opp' : 'me'}|${c.lane}`); }
+  playedThisTurn(side) { return this.board.filter((x) => x.side === side && !x.created && !x.logged && x.turn === this.turn); }
   hasText(c, re) { return !c.silenced && re.test(this.info(c).ability || ''); }
   locFx(lane) { return lane != null && this.turn >= lane + 1 ? locationEffect(this.locs[lane]) : null; }
   full(lane, side) { return this.at(lane, side).length >= 4; }
 
   // ---- mutations used by abilities ------------------------------------------
-  buff(c, n) { if (c && !c.gone) c.buff += n; }
+  // Power changes, with the cards that change how much they apply.
+  buff(c, n) {
+    if (!c || c.gone || !n) return;
+    if (n > 0 && this.has(c, 'SuperiorIronMan')) n *= 2;
+    if (n < 0) {
+      if (this.has(c, 'Colossus')) return;
+      const front = this.at(c.lane, c.side).indexOf(c) < 2;
+      if (front && this.active().some((x) => x.side === c.side && this.has(x, 'LukeCage'))) return;
+      const doublers = this.active().filter((x) => x.side !== c.side && this.has(x, 'ScorpionBrandNewDay')).length;
+      n *= 2 ** doublers;
+    }
+    c.buff += n;
+  }
   setPower(c, n) { if (c && !c.gone) c.buff = n - c.base; }
 
   canDestroy(c) {
     if (this.locs[c.lane] === 'Wakanda' && this.turn >= c.lane + 1) return false;
-    return !this.at(c.lane).some((x) => x.id === 'Armor' && !x.silenced);
+    if (this.at(c.lane).some((x) => this.has(x, 'Armor'))) return false;
+    if (this.has(c, 'Colossus')) return false;
+    if (this.active().some((x) => x.side === c.side && this.has(x, 'Caiera')) && [1, 6].includes(this.info(c).cost)) return false;
+    return true;
   }
   destroy(c) {
     if (!c || c.gone || !this.canDestroy(c)) return false;
@@ -72,6 +113,7 @@ class Game {
     this.destroyedCount++;
     this.destroyedPower += Math.max(0, p);
     this.abilityOf(c)?.destroyed?.(this, c);
+    for (const x of this.active()) if (x.side === c.side) this.abilityOf(x)?.allyDestroyed?.(this, x, c);
     return true;
   }
 
@@ -79,11 +121,14 @@ class Game {
     if (!c || c.gone || lane == null || lane < 0 || lane > 2 || lane === c.lane) return false;
     if (this.full(lane, c.side)) return false;
     if (this.locs[c.lane] === 'IslandPrison' && this.turn >= c.lane + 1) return false;
+    if (this.has(c, 'Colossus')) return false;
+    if (cause !== 'self' && this.at(c.lane).some((x) => x.side !== c.side && this.has(x, 'Mercury'))) return false;
     const from = c.lane;
     c.lane = lane;
     c.moves++;
+    c.movedTurn = this.turn;
     this.abilityOf(c)?.move?.(this, c, from, lane, cause);
-    for (const k of this.at(lane)) if (k !== c && k.id === 'Kraven' && !k.silenced) k.buff += 2;
+    for (const k of this.at(lane)) if (k !== c) this.abilityOf(k)?.cardMovedHere?.(this, k, c);
     const fx = this.locFx(lane);
     if (fx?.moveIn) fx.moveIn(this, c);
     return true;
@@ -95,26 +140,28 @@ class Game {
     const info = this.cardsById.get(id);
     const base = info ? info.power : 0;
     const c = { uid: `${from || 'x'}~${++this.copySeq}`, side, id, lane, base, buff: power == null ? 0 : power - base, moves: 0, turn: this.turn, created: true };
+    if (this.texts.has(c.uid)) c.texts = this.texts.get(c.uid);
     this.board.push(c);
     this.byUid.set(c.uid, c);
     return c;
   }
   copy(c, lane) {
     const k = this.spawn(c.side, c.id, lane, null, c.uid);
-    if (k) { k.buff = c.base + c.buff - k.base; k.copiedText = c.copiedText; }
+    if (k) { k.buff = c.base + c.buff - k.base; k.copiedText = c.copiedText; k.texts = c.texts; }
     return k;
   }
 
   // How many times an On Reveal at this lane happens (Cosmo, Wong, Kamar-Taj...).
   revealTimes(c) {
     const here = this.at(c.lane);
-    if (here.some((x) => x.id === 'Cosmo' && !x.silenced && x !== c)) return 0;
+    if (here.some((x) => x !== c && this.has(x, 'Cosmo'))) return 0;
     const fx = this.locFx(c.lane);
     if (this.locs[c.lane] === 'Knowhere' && fx) return 0;
     let n = 1;
     for (const w of this.at(c.lane, c.side)) {
       if (w === c || w.silenced) continue;
-      if (w.id === 'Wong' || w.copiedText === 'Wong') n += this.ongoingMult(w);
+      if (this.has(w, 'Wong')) n += this.ongoingMult(w);
+      if (this.has(w, 'JoaquinTorres') && this.info(c).cost === 1) n += this.ongoingMult(w);
     }
     if (this.locs[c.lane] === 'KamarTaj' && fx) n += 1;
     return n;
@@ -122,7 +169,7 @@ class Game {
   // Onslaught: other Ongoing effects here apply an additional time.
   ongoingMult(c) {
     let m = 1;
-    for (const o of this.at(c.lane, c.side)) if (o !== c && !o.silenced && o.id === 'Onslaught') m *= 2;
+    for (const o of this.at(c.lane, c.side)) if (o !== c && this.has(o, 'Onslaught')) m *= 2;
     return m;
   }
   reveal(c) {
@@ -146,6 +193,7 @@ class Game {
       const base = info ? info.power : 0;
       const c = { uid: e.uid, side: e.side, id: e.id, lane: e.lane, base, buff: 0, moves: 0, turn: this.turn, created: e.t === 'add' };
       if (e.t === 'add' && e.power != null) c.buff = e.power - base;
+      if (this.texts.has(e.uid)) c.texts = this.texts.get(e.uid);
       if (this.full(e.lane, e.side)) this.notes.push(`${info?.name || e.id}: that side was already full`);
       this.board.push(c);
       this.byUid.set(c.uid, c);
@@ -159,6 +207,11 @@ class Game {
       const waiting = this.pending.filter((p) => p.side === c.side && p.src !== c.uid);
       this.pending = this.pending.filter((p) => !waiting.includes(p));
       for (const p of waiting) p.fn(this, c);
+      for (const x of this.active()) {
+        if (x === c) continue;
+        if (x.side === c.side) this.abilityOf(x)?.allyPlayed?.(this, x, c);
+        if (x.lane === c.lane) this.abilityOf(x)?.anyPlayedHere?.(this, x, c);
+      }
       this.lastPlayed[c.side] = c;
     } else if (e.t === 'log') {
       this.board.push({ uid: e.uid, side: e.side, id: e.id, lane: null, base: 0, buff: 0, moves: 0, turn: this.turn, logged: true });
@@ -203,6 +256,7 @@ class Game {
   computeLive() {
     const act = this.active();
     for (const c of act) c.live = 0;
+    this.laneLive = [0, 1, 2].map(() => ({ me: 0, opp: 0 }));
     for (const c of act) {
       const ab = this.abilityOf(c);
       if (!ab?.ongoing) continue;
@@ -219,10 +273,13 @@ class Game {
       }
     }
   }
+  // Ongoing Power given to a whole side of a location rather than to a card
+  // (Mr. Fantastic, Klaw, Starbrand…). Abilities call g.laneBonus(lane, side, n).
+  laneBonus(lane, side, n) { if (lane >= 0 && lane <= 2) this.laneLive[lane][side] += n; }
   sideTotal(lane, side) {
-    let total = this.at(lane, side).reduce((s, c) => s + this.power(c), 0);
+    let total = this.at(lane, side).reduce((s, c) => s + this.power(c), 0) + (this.laneLive?.[lane][side] || 0);
     // Iron Man: your total Power is doubled here.
-    for (const c of this.at(lane, side)) if ((c.id === 'IronMan' || c.copiedText === 'IronMan') && !c.silenced) total *= 2 ** this.ongoingMult(c);
+    for (const c of this.at(lane, side)) if (this.has(c, 'IronMan')) total *= 2 ** this.ongoingMult(c);
     return total;
   }
 
