@@ -61,80 +61,78 @@ function value(board, lanes, turn, side) {
  *   events, lanes, turn, lastTurn, cards (Map), avgPower,
  *   oppRows: [{ id, pDeck }], oppSeen: number of their deck cards seen, oppHand,
  *   myHand: [{ id, power? }], myDeckLeft: [id], myHandSize,
- *   energyAt(turn): base energy, runs, seed
+ *   runs, seed   (energy, costs and draws come from the engine)
  * }
  * Returns { p, runs, lanes: [{ pWin }] }.
  */
 export function winChance(opts) {
-  const { events, lanes, turn, lastTurn, cards, avgPower, runs = 150, seed = 1 } = opts;
+  const { events, lanes, turn, cards, avgPower, runs = 150, seed = 1 } = opts;
   const rand = rngFrom(seed);
-  const ctxFor = (t) => ({ cards, lanes, turn: t, avgPower });
   let wins = 0;
   const laneWins = [0, 0, 0];
   let uid = 0;
-
-  const spentThisTurn = (side) => events.filter((e) => e.t === 'play' && e.side === side && e.turn === turn)
-    .reduce((s, e) => s + (cards.get(e.id)?.cost ?? 0), 0);
-  const spent = { me: spentThisTurn('me'), opp: spentThisTurn('opp') };
+  const zc = (id, extra) => { const i = cards.get(id); return { id, cost: i ? i.cost : 0, power: i ? i.power : 0, ...extra }; };
 
   for (let r = 0; r < runs; r++) {
     const ev = events.slice();
-    // Opponent: unseen deck sampled from the model.
+    // Opponent: unseen deck sampled from the model; you: your remaining deck.
     const unseen = Math.max(0, DECK - opts.oppSeen);
-    const oppCards = sample(opts.oppRows.map((x) => x.id), opts.oppRows.map((x) => x.pDeck), unseen, rand);
-    const hands = {
-      opp: oppCards.slice(0, Math.min(opts.oppHand, oppCards.length)).map((id) => ({ id })),
-      me: opts.myHand.map((x) => ({ ...x })),
-    };
-    const decks = { opp: oppCards.slice(hands.opp.length), me: shuffle(opts.myDeckLeft.slice(), rand) };
-    if (!opts.myHand.length && opts.myHandSize) hands.me = decks.me.splice(0, opts.myHandSize).map((id) => ({ id }));
+    const oppCards = sample(opts.oppRows.map((x) => x.id), opts.oppRows.map((x) => x.pDeck), unseen, rand).map((id) => zc(id));
+    const myDeck = shuffle(opts.myDeckLeft.map((id) => zc(id)), rand);
+    const myHand = opts.myHand.length ? opts.myHand.map((x) => zc(x.id, x.power != null ? { power: x.power, created: true } : {})) : myDeck.splice(0, opts.myHandSize || 0);
+    const oppHand = oppCards.splice(0, Math.min(opts.oppHand, oppCards.length));
+    const zones = { me: { hand: myHand, deck: myDeck, discard: [] }, opp: { hand: oppHand, deck: oppCards, discard: [] } };
+    const runSeed = Math.floor(rand() * 2 ** 31);
+    // Same seed for every rebuild in a run, so random effects stay consistent.
+    // makeGuess: the live board's "likely card" picks, so cards that hand/deck
+    // effects put down earlier in the real game are on the board here too.
+    const ctxFor = (t) => ({ cards, lanes, turn: t, avgPower, zones, zonesAt: events.length, zonesTurn: turn, rand: rngFrom(runSeed), guess: opts.makeGuess?.() });
 
+    let lastTurn = opts.lastTurn;
     for (let t = turn; t <= lastTurn; t++) {
-      if (t > turn) for (const s of ['me', 'opp']) if (decks[s].length && hands[s].length < 7) hands[s].push({ id: decks[s].shift() });
       // Both players commit blind: each plans against the board as it was
       // at the start of the turn plus their own plays, then all reveal.
       const startOfTurn = ev.slice();
+      const board0 = buildBoard(startOfTurn, ctxFor(t));
+      if (board0.lastTurn) lastTurn = Math.max(lastTurn, board0.lastTurn);
+      const laneState = lanes.map((l, i) => ({ ...l, loc: board0.locs[i], mine: board0.lanes[i].me.power, theirs: board0.lanes[i].opp.power, myCards: board0.lanes[i].me.cards, oppCards: board0.lanes[i].opp.cards }));
+      const mods = boardModifiers(laneState, t, avgPower);
       const planned = { me: [], opp: [] };
       for (const side of ['opp', 'me']) {
-        const own = planned[side];
-        const board0 = buildBoard(startOfTurn, ctxFor(t));
-        const laneState = lanes.map((l, i) => ({ ...l, mine: board0.lanes[i].me.power, theirs: board0.lanes[i].opp.power, myCards: board0.lanes[i].me.cards, oppCards: board0.lanes[i].opp.cards }));
-        const mods = boardModifiers(laneState, t, avgPower);
-        const energy = opts.energyAt(t) + (side === 'me' ? mods.myEnergy : mods.oppEnergy) - (t === turn ? spent[side] : 0);
-        const hand = hands[side].map((h) => ({ ...h, info: cards.get(h.id) })).filter((h) => h.info);
-        const costOf = (h) => mods.costOf(h.info);
-        // Candidate plays: the affordable subsets (≤ maxPlays cards) that use
-        // the most energy. Each is placed greedily on the real board and the
-        // one leaving this side best placed wins, so board-changing cards
-        // (Arnim Zola, Odin…) are judged by what they do, not printed Power.
+        const energy = board0.energyFor(side, t) + (side === 'me' ? mods.myEnergy : mods.oppEnergy) - board0.spent(side, t);
+        const hand = board0.zones[side].hand.map((k) => ({ ...k, info: cards.get(k.id), cost: board0.costOf(side, k) })).filter((h) => h.info);
+        const maxPlays = Math.min(mods.maxPlays, board0.maxPlays(side));
+        // Candidate plays: the affordable subsets that use the most energy.
+        // Each is placed greedily on the real board and the one leaving this
+        // side best placed wins, so board-changing cards (Arnim Zola, Odin…)
+        // are judged by what they do, not printed Power.
         const subsets = [];
         const n = Math.min(hand.length, 7);
         for (let mask = 1; mask < 1 << n; mask++) {
           let cost = 0, power = 0, k = 0;
-          for (let i = 0; i < n; i++) if (mask & (1 << i)) { cost += costOf(hand[i]); power += hand[i].power ?? hand[i].info.power; k++; }
-          if (cost > energy || k > mods.maxPlays) continue;
+          for (let i = 0; i < n; i++) if (mask & (1 << i)) { cost += hand[i].cost; power += hand[i].power; k++; }
+          if (cost > energy || k > maxPlays) continue;
           subsets.push({ mask, score: cost * 10 + power });
         }
         subsets.sort((a, b) => b.score - a.score);
         const tryPlays = (picked) => {
           const plays = [];
-          for (const h of picked.slice().sort((a, b) => costOf(b) - costOf(a))) {
+          for (const h of picked.slice().sort((a, b) => b.cost - a.cost)) {
             let pick = null, pickVal = -Infinity;
             for (let lane = 0; lane < 3; lane++) {
               if (mods.forced.length && !mods.forced.includes(lane)) continue;
-              const fx = t >= lane + 1 ? locationEffect(lanes[lane].loc) : null;
+              const fx = t >= lane + 1 ? locationEffect(board0.locs[lane]) : null;
               if (fx?.blocked?.(h.info, { turn: t, reveal: lane + 1, side: {}, avgPower })) continue;
-              const e = h.power != null && h.power !== h.info.power
-                ? { t: 'add', uid: `s${++uid}`, side, id: h.id, lane, turn: t, power: h.power }
-                : { t: 'play', uid: `s${++uid}`, side, id: h.id, lane, turn: t };
+              if (!board0.canPlay(side, h.id, lane)) continue;
+              const e = { t: 'play', uid: `s${++uid}`, side, id: h.id, lane, turn: t };
               const b = buildBoard([...startOfTurn, ...plays, e], ctxFor(t));
               if (b.lanes[lane][side].cards > 4) continue;
-              const v = value(b, lanes, t, side);
+              const v = value(b, laneState, t, side);
               if (v > pickVal) { pickVal = v; pick = e; }
             }
             if (pick) plays.push(pick);
           }
-          const v = plays.length ? value(buildBoard([...startOfTurn, ...plays], ctxFor(t)), lanes, t, side) : -Infinity;
+          const v = plays.length ? value(buildBoard([...startOfTurn, ...plays], ctxFor(t)), laneState, t, side) : -Infinity;
           return { plays, v };
         };
         let bestPlan = { plays: [], v: -Infinity };
@@ -142,20 +140,17 @@ export function winChance(opts) {
           const plan = tryPlays(hand.filter((_, i) => sub.mask & (1 << i)));
           if (plan.v > bestPlan.v + 1e-9) bestPlan = plan;
         }
-        for (const e of bestPlan.plays) {
-          own.push(e);
-          const i = hands[side].findIndex((y) => y.id === e.id);
-          if (i >= 0) hands[side].splice(i, 1);
-        }
+        planned[side].push(...bestPlan.plays);
       }
       // Reveal order alternates by turn as a stand-in for "winner reveals first".
       const order = t % 2 ? ['opp', 'me'] : ['me', 'opp'];
       ev.push(...planned[order[0]], ...planned[order[1]]);
     }
     const final = buildBoard(ev, ctxFor(lastTurn + 1));
-    const res = outcome(final, lanes, lastTurn);
+    const finalLanes = lanes.map((l, i) => ({ ...l, loc: final.locs[i] }));
+    const res = outcome(final, finalLanes, lastTurn);
     wins += res;
-    laneMargins(final, lanes, lastTurn).forEach((m, i) => { if (m > 0) laneWins[i]++; });
+    laneMargins(final, finalLanes, lastTurn).forEach((m, i) => { if (m > 0) laneWins[i]++; });
   }
   return { p: wins / runs, runs, lanes: laneWins.map((w) => ({ pWin: w / runs })) };
 }
