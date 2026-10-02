@@ -12,6 +12,7 @@
 //   { t: 'log', uid, side, id, turn }                  opponent card seen but not placed
 //   { t: 'text', uid, ids }                            the card has these abilities instead of its own
 //   { t: 'swap', uid, id, power }                      a "likely" card turned out to be this card
+//   { t: 'start', uid, side, id }                      a Game Start card (High Evolutionary, Thanos…) seen at the start
 // side is 'me' or 'opp'; lane is 0..2.
 //
 // Hands and decks: pass `zones` ({ me|opp: { hand, deck, discard } } of
@@ -27,6 +28,8 @@ import { locationEffect } from './locations.js';
 
 export const other = (side) => (side === 'me' ? 'opp' : 'me');
 
+export const EVOLVED = { Wasp: 'EvolvedWasp', MistyKnight: 'EvolvedMistyKnight', Shocker: 'EvolvedShocker', Cyclops: 'EvolvedCyclops', TheThing: 'EvolvedTheThing', Abomination: 'EvolvedAbomination', Hulk: 'EvolvedHulk' };
+
 export function buildBoard(events, { cards, lanes, turn, avgPower = () => 0, zones = null, zonesAt = 0, zonesTurn = 1, rand = Math.random, guess = null, pool = null }) {
   const g = new Game(cards, lanes, avgPower);
   g.rand = rand;
@@ -38,6 +41,7 @@ export function buildBoard(events, { cards, lanes, turn, avgPower = () => 0, zon
     if (e.t === 'play' || e.t === 'add') g.playKeys.add(`${e.turn}|${e.side}|${e.lane}`);
     if (e.t === 'text') g.texts.set(e.uid, e.ids);
     if (e.t === 'swap') g.swaps.set(e.uid, { id: e.id, power: e.power });
+    if (e.t === 'start') g.startCards[e.side].add(e.id);
   }
   let curTurn = 1;
   const takeOver = () => {
@@ -47,6 +51,24 @@ export function buildBoard(events, { cards, lanes, turn, avgPower = () => 0, zon
     // Thanos (Fractured Frontier) gives every card Quickdraw for the whole game.
     const thanos = (side) => [...g.zones[side].hand, ...g.zones[side].deck].some((k) => k.id === 'ThanosFracturedFrontier') || g.board.some((c) => c.side === side && c.id === 'ThanosFracturedFrontier');
     g.thanosFF = { me: thanos('me'), opp: thanos('opp') };
+    // Game Start cards in a deck (known, or sampled for the opponent).
+    for (const side of ['me', 'opp']) {
+      const z = g.zones[side];
+      const all = [...z.hand, ...z.deck];
+      const has = (id) => all.some((k) => k.id === id) || g.startCards[side].has(id) || g.board.some((c) => c.side === side && c.id === id);
+      for (const id of ['HighEvolutionary', 'Agamotto', 'Arishem', 'Dormammu', 'ShangChiMasterOfTheRings']) if (has(id)) g.startCards[side].add(id);
+      const shuffleIn = (id) => z.deck.splice(Math.floor(g.rand() * (z.deck.length + 1)), 0, g.zoneCard(id, { created: true }));
+      const seen = (id) => g.board.some((c) => c.side === side && c.id === id) || all.some((k) => k.id === id);
+      if (has('Agamotto')) ['Spell01Agamotto', 'Spell02Agamotto', 'Spell03Agamotto', 'Spell04Agamotto'].forEach((id) => { if (!seen(id)) shuffleIn(id); });
+      if (has('Arishem') && g.turn <= 2) for (let i = 0; i < 12; i++) { const id = g.randomId(); if (id) shuffleIn(id); }
+      if (has('Dormammu') && !['SummoningRitual01Dormammu', 'SummoningRitual02Dormammu', 'SummoningRitual03Dormammu'].some(seen)) g.addToHand(side, 'SummoningRitual01Dormammu', { created: true });
+      if (has('ShangChiMasterOfTheRings') && !seen('TenRings') && !seen('TenRingsUpgrade')) g.addToHand(side, 'TenRings', { created: true });
+      // Copied-text Game Starts for hidden cards: a random matching card's ability.
+      for (const k of all) {
+        if (k.id === 'Hulkling' && !k.texts) k.texts = [g.randomId((x) => x.cost === 6 && x.special)];
+        if (k.id === 'Kang' && !k.texts) k.texts = [g.randomId((x) => x.cost >= 3 && x.special)];
+      }
+    }
     // Thanos: the six Infinity Stones are shuffled into the deck at game start.
     for (const side of ['me', 'opp']) {
       const z = g.zones[side];
@@ -104,6 +126,7 @@ class Game {
     this.costUp = { me: {}, opp: {} };         // turn -> +cost (Sandman)
     this.shots = { me: 0, opp: 0 };            // Thanos (Fractured Frontier) Infinity Shots loaded
     this.lastTurn = null;                      // Limbo, Tva, Sandcastle
+    this.startCards = { me: new Set(), opp: new Set() }; // Game Start cards known to be in each deck
   }
 
   // ---- hands, decks, energy (real in playouts; guessed on the live board) ---
@@ -169,7 +192,7 @@ class Game {
   costOf(side, k) {
     let cost = k.cost;
     const info = this.cardsById.get(k.id);
-    const rule = ABILITIES[k.id];
+    const rule = this.ruleFor(side, k.id);
     if (rule?.cost) cost = rule.cost(this, side, k, cost);
     const mine = this.active().filter((x) => x.side === side);
     const foe = this.active().filter((x) => x.side !== side);
@@ -217,7 +240,7 @@ class Game {
   abilityOf(c) {
     if (c.silenced) return null;
     const ids = this.textIds(c);
-    if (ids.length === 1) return ABILITIES[ids[0]] || null;
+    if (ids.length === 1) return this.ruleFor(c.side, ids[0]);
     const parts = ids.map((id) => ABILITIES[id]).filter(Boolean);
     const merged = {};
     for (const hook of ['reveal', 'ongoing', 'move', 'destroyed', 'eot', 'allyPlayedHere', 'allyPlayed', 'anyPlayedHere', 'cardMovedHere', 'allyDestroyed']) {
@@ -226,6 +249,9 @@ class Game {
     }
     return merged;
   }
+  // High Evolutionary: no-ability cards use their evolved version.
+  evolved(side) { return this.startCards[side].has('HighEvolutionary'); }
+  ruleFor(side, id) { return (this.evolved(side) && EVOLVED[id] && ABILITIES[EVOLVED[id]]) || ABILITIES[id] || null; }
   oppPlayedHere(c) { return this.playKeys.has(`${this.turn}|${c.side === 'me' ? 'opp' : 'me'}|${c.lane}`); }
   playedThisTurn(side) { return this.board.filter((x) => x.side === side && !x.created && !x.logged && x.turn === this.turn); }
   hasText(c, re) { return !c.silenced && re.test(this.info(c).ability || ''); }
@@ -356,6 +382,7 @@ class Game {
           c.buff += k.power - base;
           this.spent[e.side][this.turn] = (this.spent[e.side][this.turn] || 0) + this.costOf(e.side, k);
           if (k.created) c.created = true;
+          if (k.texts && !c.texts) c.texts = k.texts;
           // Quickdraw: played the turn it was drawn.
           if (k.turnDrawn === this.turn && this.thanosFF?.[e.side]) this.shots[e.side] = Math.min(6, this.shots[e.side] + 1);
           if (k.onPlay) k.onPlay(this, c);
@@ -405,6 +432,8 @@ class Game {
 
   endOfTurn(t) {
     this.turn = t;
+    // Evolved Hulk grows in hand too.
+    for (const side of ['me', 'opp']) if (this.sim && this.evolved(side) && !this.spentAll(side, t)) this.hand(side).forEach((k) => { if (k.id === 'Hulk') k.power += 2; });
     for (const c of this.active()) this.abilityOf(c)?.eot?.(this, c);
     // Location end-of-turn effects work on side totals.
     this.computeLive();
