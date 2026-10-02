@@ -237,6 +237,35 @@ export const LOCATION_EFFECTS = {
   ZennLa: none('Adds a 3-Cost card from deck here.'),
 };
 
+// "Next card here" effects: once the lane is marked used, they stop applying.
+for (const id of ['BlackVortex', 'Vormir', 'CastleZemo', 'AuntMays']) LOCATION_EFFECTS[id].once = true;
+
+// Locations that make or hand out cards. The lane's "Add card" sheet opens
+// with this question, suggests matching cards first and defaults to `sides[0]`
+// ('opp' / 'me' = that side of this lane, 'hand' = your hand).
+const isActivate = (c) => /Activate/i.test(c.ability || '');
+const CREATES = {
+  BlackVortex: { ask: 'What did Black Vortex make?', hint: '6-Cost', filter: (c) => c.cost === 6, sides: ['opp', 'me'] },
+  Tarnax: { ask: 'What did Tarnax transform it into?', sides: ['opp', 'me'] },
+  CaveOfTheDragon: { ask: 'Which 5+ Cost cards appeared?', hint: '5+ Cost', filter: (c) => c.cost >= 5, sides: ['opp', 'me'] },
+  XMansion: { ask: 'Which cards appeared here?', sides: ['opp', 'me'] },
+  Kvch: { ask: 'Which Activate cards appeared?', hint: 'Activate', filter: isActivate, sides: ['opp', 'me'] },
+  GrandCentral: { ask: 'Which cards were put here?', sides: ['opp', 'me'] },
+  Sakaar: { ask: 'Which cards were put here?', sides: ['opp', 'me'] },
+  ZennLa: { ask: 'Which 3-Cost cards were added?', hint: '3-Cost', filter: (c) => c.cost === 3, sides: ['opp', 'me'] },
+  MonsterIsland: { ask: 'Add the Monsters?', sides: ['opp', 'me'] },
+  CampLehigh: { ask: 'Which 3-Cost card did you get?', hint: '3-Cost', filter: (c) => c.cost === 3, sides: ['hand'] },
+  TheHub: { ask: 'Which card did you get?', sides: ['hand'] },
+  GreatPortal: { ask: 'Which 10+ Power card did you get?', hint: '10+ Power', filter: (c) => c.power >= 10, sides: ['hand'] },
+  Triskelion: { ask: 'Which cards did you get?', sides: ['hand'] },
+  DailyBugle: { ask: 'Which card did you copy?', sides: ['hand'] },
+  WhitePalace: { ask: 'Which card did you copy?', sides: ['hand'] },
+  ThePeak: { ask: 'Which card did you steal?', sides: ['hand'] },
+  Weirdworld: { ask: 'Which cards did you draw?', sides: ['hand'] },
+  Milano: { ask: 'Which Guardian did you get?', sides: ['hand'] },
+};
+for (const [id, cr] of Object.entries(CREATES)) LOCATION_EFFECTS[id] = { ...LOCATION_EFFECTS[id], creates: cr };
+
 export const KIND_LABEL = { modelled: 'Modelled', approx: 'Approximate', symmetric: 'Hits both sides', none: 'No power effect' };
 
 export function locationEffect(id) {
@@ -281,7 +310,8 @@ export function boardModifiers(lanes, turn, avgPower) {
 // Lane rules for opponentThreat() / my answers.
 export function laneRules(lanes, i, turn, who, avgPower, mods) {
   const lane = lanes[i];
-  const fx = turn >= i + 1 ? locationEffect(lane.loc) : null;
+  const fx0 = turn >= i + 1 ? locationEffect(lane.loc) : null;
+  const fx = fx0?.once && lane.used ? null : fx0;
   const ctx = laneCtx(i, turn, lane, who, avgPower);
   const cardsHere = who === 'opp' ? lane.oppCards : lane.myCards;
   const forcedElsewhere = mods.forced.length && !mods.forced.includes(i);

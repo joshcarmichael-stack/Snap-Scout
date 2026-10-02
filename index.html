@@ -92,6 +92,27 @@
   .answer b { color: var(--accent); }
   .answer.short { background: var(--panel-2); color: var(--muted); }
   .lane-pad { height: 8px; }
+  .lane-tools { padding: 6px 8px 0; display: flex; flex-direction: column; gap: 4px; }
+  .addcard { width: 100%; min-height: 32px; border-radius: 8px; border: 1px dashed var(--line); background: none; color: var(--muted); font-size: 12px; font-weight: 600; padding: 4px; }
+  .addcard.hl { border-style: solid; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .usedchip { min-height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); font-size: 11px; padding: 2px 4px; }
+  .usedchip.on { color: var(--good); border-color: var(--good); background: var(--good-soft); }
+  .extras { display: flex; flex-wrap: wrap; gap: 4px; }
+  .xchip { border: 0; border-radius: 6px; font-size: 11px; font-weight: 600; padding: 3px 6px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .xchip.opp { background: var(--bad-soft); color: var(--bad); }
+  .xchip.me { background: var(--good-soft); color: var(--good); }
+  .seg { display: flex; background: var(--panel-2); border-radius: 10px; padding: 3px; gap: 2px; margin-bottom: 8px; }
+  .seg button { flex: 1; border: 0; background: none; border-radius: 8px; height: 34px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .seg button[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
+  .fchip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; height: 30px; padding: 0 12px; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+  .fchip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .res.sel { border-color: var(--accent); background: var(--accent-soft); }
+  .sheet-ft { position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); padding: 10px 16px calc(env(safe-area-inset-bottom) + 10px); display: flex; gap: 8px; align-items: center; }
+  .sheet-ft .sel-name { flex: 1; min-width: 0; font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sheet-ft label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .sheet-ft input::-webkit-outer-spin-button, .sheet-ft input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .sheet-ft input { -moz-appearance: textfield; width: 64px; height: 40px; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; text-align: center; font-size: 18px; font-weight: 700; }
+  #cardList { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
 
   /* Card strips */
   .strip { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: none; }
@@ -274,6 +295,23 @@
   <div class="sheet-list" id="locList"></div>
 </dialog>
 
+<dialog id="cardSheet">
+  <div class="sheet-hd">
+    <div class="t"><span id="cardSheetTitle">Add a card</span><button id="cardClose">Close</button></div>
+    <div class="seg" id="cardSides" role="group" aria-label="Where the card went">
+      <button data-cside="opp">Their side</button><button data-cside="me">My side</button><button data-cside="hand">My hand</button>
+    </div>
+    <button class="fchip" id="cardFilter" hidden></button>
+    <input type="search" id="cardSearch" placeholder="Search cards…" autocomplete="off">
+  </div>
+  <div class="sheet-list"><div id="cardList"></div></div>
+  <div class="sheet-ft">
+    <span class="sel-name" id="cardSel">Pick a card</span>
+    <label for="cardPower">Power</label><input id="cardPower" type="number" inputmode="numeric">
+    <button class="btn primary" id="cardAdd" disabled>Add</button>
+  </div>
+</dialog>
+
 <script type="module">
 import { Model, handProbability, nextPlayLikelihood, opponentThreat } from './model.js';
 import { locationEffect, boardModifiers, laneRules, evaluateBoard, KIND_LABEL } from './locations.js';
@@ -304,13 +342,13 @@ const avgPower = (cost) => { const a = avgByCost.get(Math.min(6, Math.max(0, cos
 // Game state and saved decks are kept on this device only.
 const STORE = 'snap-scout-v3';
 const DECKS = 'snap-scout-decks';
-const freshLane = () => ({ loc: null, mine: 0, theirs: 0, myCards: 0, oppCards: 0 });
-const fresh = () => ({ turn: 1, energy: null, hand: null, played: [], mine: {}, sort: 'next', showAll: false, lanes: [0, 1, 2].map(freshLane) });
+const freshLane = () => ({ loc: null, mine: 0, theirs: 0, myCards: 0, oppCards: 0, extras: [], used: false });
+const fresh = () => ({ turn: 1, energy: null, hand: null, played: [], mine: {}, myExtra: [], sort: 'next', showAll: false, lanes: [0, 1, 2].map(freshLane) });
 let state = fresh();
 let decks = { list: [], active: null };
 const load = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
 const s0 = load(STORE) || load('snap-scout-v2');
-if (s0 && Array.isArray(s0.lanes)) state = { ...state, ...s0, lanes: s0.lanes.map((l) => ({ ...freshLane(), ...l })), mine: s0.mine || {} };
+if (s0 && Array.isArray(s0.lanes)) state = { ...state, ...s0, lanes: s0.lanes.map((l) => ({ ...freshLane(), ...l })), mine: s0.mine || {}, myExtra: s0.myExtra || [] };
 const d0 = load(DECKS);
 if (d0 && Array.isArray(d0.list)) decks = d0;
 const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); localStorage.setItem(DECKS, JSON.stringify(decks)); } catch {} };
@@ -351,15 +389,21 @@ function compute() {
   // My side: cards in hand if any are marked, otherwise everything not yet played.
   const deck = activeDeck();
   let myRows = [], myFrom = '';
-  if (deck) {
+  const extras = state.myExtra.filter((x) => state.mine[`x:${x.key}`] !== 'played');
+  if (deck || extras.length) {
     const status = (id) => state.mine[id] || 'deck';
-    const hand = deck.cards.filter((id) => status(id) === 'hand');
-    const pool = hand.length ? hand : deck.cards.filter((id) => status(id) !== 'played');
-    myFrom = hand.length ? 'hand' : 'deck';
+    const deckCards = deck ? deck.cards : [];
+    const hand = deckCards.filter((id) => status(id) === 'hand');
+    const pool = hand.length || !deck ? hand : deckCards.filter((id) => status(id) !== 'played');
+    myFrom = hand.length || extras.length ? 'hand' : 'deck';
     myRows = pool.map((id) => cards.get(id)).filter(Boolean).map((c) => ({ ...c, cost: mods.costOf(c), power: mods.powerOf(c) }));
+    for (const x of extras) {
+      const c = cards.get(x.id);
+      if (c) myRows.push({ ...c, cost: mods.costOf(c), power: x.power });
+    }
   }
   const answers = board.map((b, i) => {
-    if (!deck || b.status === 'safe' || b.status === 'closed' || b.scoring) return null;
+    if ((!deck && !extras.length) || b.status === 'safe' || b.status === 'closed' || b.scoring) return null;
     const target = b.status === 'at-risk' ? b.holdNeed : b.holdNeed || b.need;
     return bestAnswer(myRows, myEnergy, laneRules(state.lanes, i, state.turn, 'me', avgPower, mods), target);
   });
@@ -399,7 +443,12 @@ function renderLanes(c) {
         ${loc ? `<img src="${ART(loc.art, 240)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
         <span class="loc-txt">${loc ? `<span class="loc-name">${esc(loc.name)}</span>` : `<span class="loc-empty">Location ${i + 1}<br>Tap to set</span>`}</span>
       </button>
-      ${loc ? `<div class="loc-fx" title="${esc(loc.ability)}">${esc(fx?.note || loc.ability || 'No effect.')}</div><div class="side"><span class="badge ${fx?.kind || 'none'}">${KIND_LABEL[fx?.kind || 'none']}</span></div>` : ''}
+      ${loc ? `<div class="loc-fx" title="${esc(loc.ability)}">${esc(fx?.once && lane.used ? 'Next-card effect already used.' : fx?.note || loc.ability || 'No effect.')}</div><div class="side"><span class="badge ${fx?.kind || 'none'}">${KIND_LABEL[fx?.kind || 'none']}</span></div>` : ''}
+      <div class="lane-tools">
+        ${lane.extras.length ? `<div class="extras">${lane.extras.map((x, k) => `<button class="xchip ${x.side}" data-unextra="${i}:${k}" aria-label="Remove ${esc(nameOf(x.id))}">${esc(nameOf(x.id))} ${x.power} ✕</button>`).join('')}</div>` : ''}
+        ${fx?.once ? `<button class="usedchip ${lane.used ? 'on' : ''}" data-used="${i}">${lane.used ? 'Effect used ✓' : 'Mark effect used'}</button>` : ''}
+        <button class="addcard ${fx?.creates ? 'hl' : ''}" data-addcard="${i}">${fx?.creates ? 'What came out?' : '+ Add card'}</button>
+      </div>
       <div class="side"><label>Opponent</label>
         <div class="pw opp"><button data-pw="${i}:theirs:-1" aria-label="Opponent power down">−</button><input class="tnum" inputmode="numeric" type="number" data-lane="${i}:theirs" value="${lane.theirs}" aria-label="Opponent power lane ${i + 1}"><button data-pw="${i}:theirs:1" aria-label="Opponent power up">+</button></div>
         ${pips('opp', lane.oppCards)}
@@ -418,9 +467,13 @@ function renderLanes(c) {
 
 function renderMyDeck(c) {
   const deck = activeDeck();
+  const extraHtml = state.myExtra.map((x) => {
+    const st = state.mine[`x:${x.key}`] === 'played' ? 'played' : 'hand';
+    return `<button class="pcard ${st}" data-myx="${x.key}" aria-label="${esc(nameOf(x.id))}: ${st}">${artHtml(cards.get(x.id)?.art, nameOf(x.id))}<span class="lbl">${st === 'played' ? 'Played' : `Created ${x.power}`}</span></button>`;
+  }).join('');
   if (!deck) {
     $('myDeckHint').textContent = '';
-    $('myDeck').innerHTML = `<button class="cta" data-go="decks"><b>Add your deck</b> to get counter alerts and the best play for each lane.</button>`;
+    $('myDeck').innerHTML = (extraHtml ? `<div class="strip mine">${extraHtml}</div>` : '') + `<button class="cta" data-go="decks"><b>Add your deck</b> to get counter alerts and the best play for each lane.</button>`;
     $('alerts').innerHTML = '';
     return;
   }
@@ -429,7 +482,7 @@ function renderMyDeck(c) {
   $('myDeck').innerHTML = `<div class="strip mine">${deck.cards.map((id) => {
     const card = cards.get(id);
     return `<button class="pcard ${st(id)}" data-mine="${id}" aria-label="${esc(nameOf(id))}: ${st(id)}">${artHtml(card?.art, nameOf(id))}<span class="lbl">${st(id) === 'hand' ? 'In hand' : st(id) === 'played' ? 'Played' : esc(nameOf(id))}</span></button>`;
-  }).join('')}</div>`;
+  }).join('')}${extraHtml}</div>`;
   const remaining = deck.cards.filter((id) => st(id) !== 'played');
   const alerts = counterAlerts(remaining, state.played, c.rows, cards);
   $('alerts').innerHTML = alerts.map((a) => {
@@ -602,6 +655,26 @@ document.body.addEventListener('click', (e) => {
     const prev = snapshot();
     const [id] = state.played.splice(Number(d.remove), 1);
     toast(`Removed ${nameOf(id)}`, prev);
+  } else if (d.addcard !== undefined) return openCardSheet(Number(d.addcard));
+  else if (d.used !== undefined) state.lanes[d.used].used = !state.lanes[d.used].used;
+  else if (d.unextra) {
+    const prev = snapshot();
+    const [i, k] = d.unextra.split(':').map(Number);
+    const lane = state.lanes[i];
+    const [x] = lane.extras.splice(k, 1);
+    const [pw, n] = x.side === 'opp' ? ['theirs', 'oppCards'] : ['mine', 'myCards'];
+    lane[pw] -= x.power;
+    lane[n] = Math.max(0, lane[n] - 1);
+    toast(`Removed ${nameOf(x.id)} (−${x.power})`, prev);
+  } else if (d.myx) {
+    const key = `x:${d.myx}`;
+    if (state.mine[key] === 'played') {
+      const prev = snapshot();
+      const x = state.myExtra.find((e) => e.key === d.myx);
+      state.myExtra = state.myExtra.filter((e) => e.key !== d.myx);
+      delete state.mine[key];
+      toast(`Removed ${nameOf(x.id)}`, prev);
+    } else state.mine[key] = 'played';
   } else if (d.mine) {
     const next = { deck: 'hand', hand: 'played', played: 'deck' }[state.mine[d.mine] || 'deck'];
     if (next === 'deck') delete state.mine[d.mine]; else state.mine[d.mine] = next;
@@ -663,6 +736,73 @@ document.body.addEventListener('click', (e) => {
   else return;
   render();
 });
+// ---- Add-card sheet: created, transformed or random cards ----------------
+const sheet = { lane: 0, side: 'opp', filterOn: false, sel: null, creates: null };
+function openCardSheet(i) {
+  const lane = state.lanes[i];
+  const fx = state.turn >= i + 1 ? locationEffect(lane.loc) : null;
+  sheet.lane = i;
+  sheet.creates = fx?.creates || null;
+  sheet.side = sheet.creates?.sides[0] || 'opp';
+  sheet.filterOn = !!sheet.creates?.filter;
+  sheet.sel = null;
+  $('cardSheetTitle').textContent = sheet.creates?.ask || `Add a card at Location ${i + 1}`;
+  $('cardFilter').hidden = !sheet.creates?.filter;
+  $('cardFilter').textContent = sheet.creates?.hint ? `Only ${sheet.creates.hint}` : '';
+  $('cardSearch').value = '';
+  $('cardPower').value = '';
+  renderCardSheet();
+  $('cardSheet').showModal();
+}
+function renderCardSheet() {
+  for (const b of $('cardSides').children) b.setAttribute('aria-pressed', String(b.dataset.cside === sheet.side));
+  $('cardFilter').setAttribute('aria-pressed', String(sheet.filterOn));
+  const q = $('cardSearch').value.trim().toLowerCase();
+  const f = sheet.filterOn && sheet.creates?.filter;
+  const list = cardData.cards
+    .filter((c) => (!f || f(c)) && (!q || c.name.toLowerCase().includes(q)))
+    .sort((a, b) => (q ? a.name.toLowerCase().indexOf(q) - b.name.toLowerCase().indexOf(q) : 0) || (a.generated ? 1 : 0) - (b.generated ? 1 : 0) || a.name.localeCompare(b.name))
+    .slice(0, 60);
+  $('cardList').innerHTML = list.map((c) => resHtml(c, 'pickcard').replace('class="res"', `class="res ${sheet.sel === c.id ? 'sel' : ''}"`)).join('') || '<div class="empty">No card matches.</div>';
+  const c = sheet.sel && cards.get(sheet.sel);
+  $('cardSel').textContent = c ? c.name : 'Pick a card';
+  $('cardAdd').disabled = !c;
+  $('cardAdd').textContent = sheet.side === 'hand' ? 'Add to hand' : 'Add';
+}
+$('cardSearch').addEventListener('input', renderCardSheet);
+$('cardClose').addEventListener('click', () => $('cardSheet').close());
+$('cardSheet').addEventListener('click', (e) => {
+  if (e.target === $('cardSheet')) return $('cardSheet').close();
+  const t = e.target.closest('button');
+  if (!t) return;
+  if (t.dataset.cside) sheet.side = t.dataset.cside;
+  else if (t.id === 'cardFilter') sheet.filterOn = !sheet.filterOn;
+  else if (t.dataset.pickcard) {
+    sheet.sel = t.dataset.pickcard;
+    $('cardPower').value = cards.get(sheet.sel)?.power ?? 0;
+  } else if (t.id === 'cardAdd' && sheet.sel) {
+    const prev = snapshot();
+    const power = Number($('cardPower').value) || 0;
+    const name = nameOf(sheet.sel);
+    if (sheet.side === 'hand') {
+      state.myExtra.push({ key: Date.now().toString(36), id: sheet.sel, power });
+      toast(`${name} added to your hand`, prev);
+    } else {
+      const lane = state.lanes[sheet.lane];
+      const [pw, n] = sheet.side === 'opp' ? ['theirs', 'oppCards'] : ['mine', 'myCards'];
+      lane.extras.push({ id: sheet.sel, side: sheet.side, power });
+      lane[pw] += power;
+      lane[n] = Math.min(4, lane[n] + 1);
+      if (locationEffect(lane.loc)?.once) lane.used = true;
+      toast(`${name} +${power} on ${sheet.side === 'opp' ? 'their' : 'your'} side`, prev);
+    }
+    $('cardSheet').close();
+    render();
+    return;
+  } else return;
+  renderCardSheet();
+});
+
 function startEdit(deck) {
   editing = deck ? { id: deck.id, cards: [...deck.cards] } : { id: null, cards: [] };
   $('deckName').value = deck?.name || '';

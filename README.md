@@ -12,6 +12,7 @@ Open `index.html` through any static server (e.g. `python3 -m http.server`). Eve
 - **Next play** weights in-hand odds by cost vs energy this turn.
 - **Lanes**: the power you need to win each lane, and the opponent's likely max added power from their top predicted affordable cards (printed power; card abilities are flagged "not modelled").
 - **Locations** (`locations.js`): every released location has a rule: exact (power per card, blocks, cost/energy changes, end-of-turn effects, scoring changes, Baxter Building style swings), approximate (random outcomes use averages), symmetric (no net change), or no power effect. `tests/` fails if a data refresh brings a location without a rule.
+- **Created and random cards**: every lane has "+ Add card" (or "What came out?" on locations like Black Vortex, Tarnax, Camp Lehigh, Cave of the Dragon). Pick the card, edit its power (e.g. Blob at 15), and choose their side, your side or your hand. Board cards update that lane's total and card count; hand cards feed your best-play suggestions. "Next card" locations stop being estimated once marked used.
 - **My decks** (`decks.js`): import a deck by pasting the code from Marvel Snap's Copy button (short or long format) or card names; export back to a code. In game, tap your cards to mark them in hand or played. Scout suggests the cheapest play that wins or holds each lane and alerts when your tech cards (Shang-Chi, Enchantress, Armor, Cosmo, Killmonger…) have targets on board or likely in the opponent's deck. Decks are stored on the device only.
 
 ## Data
