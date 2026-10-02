@@ -152,25 +152,34 @@ export function nextPlayLikelihood(pHand, cost, energy) {
 
 // Opponent's likely max added power this turn: the strongest combination
 // (up to 3 cards, total cost <= energy) of their top predicted affordable
-// cards. Uses printed power only.
-export function opponentThreat(candidates, energy, { minHand = 0.15, pool = 6 } = {}) {
+// cards. Uses printed power plus any lane rules (see locations.js):
+//   lane.capacity      cards that still fit
+//   lane.allowed(c)    false if c can't be played here
+//   lane.bonus(c, n)   extra power for c when n cards are played here
+const OPEN_LANE = { capacity: 4, allowed: () => true, bonus: () => 0 };
+
+export function opponentThreat(candidates, energy, lane = OPEN_LANE, { minHand = 0.15, pool = 6 } = {}) {
   const top = candidates
-    .filter((c) => c.cost <= energy && c.pHand >= minHand)
+    .filter((c) => c.cost <= energy && c.pHand >= minHand && lane.allowed(c))
     .sort((a, b) => b.pNext - a.pNext)
     .slice(0, pool);
+  const maxCards = Math.min(3, lane.capacity);
   let best = { power: 0, cards: [] };
-  const walk = (start, cost, power, picked) => {
-    if (power > best.power) best = { power, cards: [...picked] };
-    if (picked.length === 3) return;
+  const walk = (start, cost, picked) => {
+    if (picked.length) {
+      const power = picked.reduce((s, c) => s + c.power + lane.bonus(c, picked.length), 0);
+      if (power > best.power) best = { power, cards: [...picked] };
+    }
+    if (picked.length === maxCards) return;
     for (let i = start; i < top.length; i++) {
       const c = top[i];
       if (cost + c.cost > energy) continue;
       picked.push(c);
-      walk(i + 1, cost + c.cost, power + c.power, picked);
+      walk(i + 1, cost + c.cost, picked);
       picked.pop();
     }
   };
-  walk(0, 0, 0, []);
+  walk(0, 0, []);
   return { ...best, notModelled: best.cards.filter((c) => c.ongoing || c.special) };
 }
 

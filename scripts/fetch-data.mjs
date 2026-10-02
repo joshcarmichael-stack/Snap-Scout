@@ -6,6 +6,7 @@ import { writeFileSync } from 'node:fs';
 
 const UA = 'Mozilla/5.0 (snap-scout data refresh)';
 const CARDS_URL = 'https://marvelsnapzone.com/getinfo/?searchtype=cards&searchcardstype=true';
+const LOCATIONS_URL = 'https://marvelsnapzone.com/getinfo/?searchtype=locations&searchcardstype=true';
 const DECKS_URL = 'https://api.snap.untapped.gg/api/v1/analytics/query/decks_stats_by_pool_v4/free?TimestampRangeFilter=CURRENT_META_PERIOD';
 
 async function getJson(url) {
@@ -16,7 +17,10 @@ async function getJson(url) {
 
 const stripHtml = (s) => (s || '').replace(/<[^>]+>/g, '').replace(/&#0?39;|&rsquo;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 
-const [mszRaw, utRaw] = await Promise.all([getJson(CARDS_URL), getJson(DECKS_URL)]);
+const [mszRaw, locRaw, utRaw] = await Promise.all([getJson(CARDS_URL), getJson(LOCATIONS_URL), getJson(DECKS_URL)]);
+
+// Art is stored as the bare file name; the app serves it through a resizing CDN.
+const artFile = (url) => (url || '').split('/').pop().split('?')[0];
 
 const defIds = utRaw.metadata.d_map;
 const inDecks = new Set(defIds);
@@ -38,6 +42,7 @@ for (const c of mszRaw.success.cards) {
     ability,
     ongoing: tags.includes('Ongoing') || /^Ongoing:/i.test(ability),
     special: ability.length > 0,
+    art: artFile(c.art),
     ...(c.status !== 'released' && !inDecks.has(c.carddefid) ? { generated: true } : {}),
   });
 }
@@ -59,11 +64,17 @@ for (const row of utRaw.data) {
 }
 decks.sort((a, b) => b[0] - a[0]);
 
+const locations = locRaw.success.cards
+  .filter((l) => l.type === 'Location' && l.status === 'released')
+  .map((l) => ({ id: l.carddefid, name: stripHtml(l.name), ability: stripHtml(l.ability), art: artFile(l.art) }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
 const fetched = new Date().toISOString().slice(0, 10);
+writeFileSync(new URL('../data/locations.json', import.meta.url), JSON.stringify({ fetched, source: 'marvelsnapzone.com', locations }));
 writeFileSync(new URL('../data/cards.json', import.meta.url), JSON.stringify({ fetched, source: 'marvelsnapzone.com', cards }));
 // One deck per line keeps git diffs readable.
 writeFileSync(
   new URL('../data/decks.json', import.meta.url),
   `{"fetched":"${fetched}","source":"snap.untapped.gg CURRENT_META_PERIOD","format":"[games, ...12 indices into ids]",\n"ids":${JSON.stringify(defIds)},\n"decks":[\n${decks.map((d) => JSON.stringify(d)).join(',\n')}\n]}\n`,
 );
-console.log(`${cards.length} cards, ${decks.length} decks, ${decks.reduce((s, d) => s + d[0], 0)} games`);
+console.log(`${cards.length} cards, ${locations.length} locations, ${decks.length} decks, ${decks.reduce((s, d) => s + d[0], 0)} games`);
