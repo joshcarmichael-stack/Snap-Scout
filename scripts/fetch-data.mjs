@@ -43,6 +43,7 @@ for (const c of mszRaw.success.cards) {
     ongoing: tags.includes('Ongoing') || /^Ongoing:/i.test(ability),
     special: ability.length > 0,
     art: artFile(c.art),
+    tags: tags.filter((t) => t !== 'No Ability'),
     ...(c.status !== 'released' && !inDecks.has(c.carddefid) ? { generated: true } : {}),
   });
 }
@@ -66,7 +67,7 @@ decks.sort((a, b) => b[0] - a[0]);
 
 const locations = locRaw.success.cards
   .filter((l) => l.type === 'Location' && l.status === 'released')
-  .map((l) => ({ id: l.carddefid, name: stripHtml(l.name), ability: stripHtml(l.ability), art: artFile(l.art) }))
+  .map((l) => ({ id: l.carddefid || stripHtml(l.name).replace(/[^A-Za-z0-9]/g, ''), name: stripHtml(l.name), ability: stripHtml(l.ability), art: artFile(l.art) }))
   .sort((a, b) => a.name.localeCompare(b.name));
 
 const fetched = new Date().toISOString().slice(0, 10);

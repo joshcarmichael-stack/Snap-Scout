@@ -32,14 +32,15 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  button, input { font: inherit; color: inherit; }
+  button, input, textarea { font: inherit; color: inherit; }
   button { cursor: pointer; touch-action: manipulation; }
-  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
   .tnum { font-variant-numeric: tabular-nums; }
 
   /* Header */
   header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: calc(env(safe-area-inset-top) + 8px) 16px 8px; }
-  .hdr { max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 6px; }
+  .hdr { max-width: 760px; margin: 0 auto; display: flex; align-items: center; gap: 6px; min-height: 40px; }
   .brand { font-weight: 800; letter-spacing: -.01em; margin-right: auto; font-size: 16px; }
   .stat { display: flex; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; height: 40px; }
   .stat button { width: 30px; height: 100%; border: 0; background: none; color: var(--muted); font-size: 18px; }
@@ -50,22 +51,24 @@
   .stat.energy b { color: var(--energy); }
   .icon-btn { height: 40px; width: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); font-size: 17px; }
 
-  main { max-width: 760px; margin: 0 auto; padding: 12px 16px calc(env(safe-area-inset-bottom) + 96px); }
+  main { max-width: 760px; margin: 0 auto; padding: 12px 16px calc(env(safe-area-inset-bottom) + 110px); }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 20px 2px 8px; display: flex; align-items: baseline; gap: 8px; }
   h2 .right { margin-left: auto; text-transform: none; letter-spacing: 0; font-size: 12px; }
+  .banner { background: var(--warn-soft); color: var(--warn); border-radius: 12px; padding: 8px 12px; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
 
   /* Lanes */
   .lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .lane { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; }
   .loc { position: relative; border: 0; padding: 0; background: var(--panel-2); min-height: 64px; text-align: left; display: block; width: 100%; overflow: hidden; }
   .loc img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .55; }
-  .loc .loc-txt { position: relative; padding: 8px 8px 6px; display: block; background: linear-gradient(to top, color-mix(in srgb, var(--panel) 92%, transparent) 30%, transparent); min-height: 64px; display: flex; flex-direction: column; justify-content: flex-end; }
+  .loc .loc-txt { position: relative; padding: 8px 8px 6px; background: linear-gradient(to top, color-mix(in srgb, var(--panel) 92%, transparent) 30%, transparent); min-height: 64px; display: flex; flex-direction: column; justify-content: flex-end; }
   .loc .loc-name { font-weight: 700; font-size: 13px; line-height: 1.15; }
   .loc .loc-empty { color: var(--muted); font-size: 12px; }
-  .loc-fx { font-size: 11px; color: var(--muted); padding: 6px 8px 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; min-height: 0; }
+  .loc-fx { font-size: 11px; color: var(--muted); padding: 6px 8px 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .badge { display: inline-block; font-size: 10px; font-weight: 700; border-radius: 6px; padding: 1px 5px; }
-  .badge.ok { background: var(--good-soft); color: var(--good); }
-  .badge.no { background: var(--warn-soft); color: var(--warn); }
+  .badge.modelled { background: var(--good-soft); color: var(--good); }
+  .badge.approx { background: var(--warn-soft); color: var(--warn); }
+  .badge.symmetric, .badge.none { background: var(--panel-2); color: var(--muted); }
   .side { padding: 8px 8px 0; }
   .side label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 3px; }
   .pw { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg); height: 40px; }
@@ -82,25 +85,42 @@
   .verdict.at-risk { background: var(--warn-soft); color: var(--warn); }
   .verdict.losing { background: var(--bad-soft); color: var(--bad); }
   .verdict.closed { background: var(--panel-2); color: var(--muted); }
-  .threat { padding: 6px 8px 8px; font-size: 11px; color: var(--muted); line-height: 1.3; }
+  .threat { padding: 6px 8px 0; font-size: 11px; color: var(--muted); line-height: 1.3; }
   .threat b { color: var(--text); }
   .threat .nm { color: var(--warn); }
+  .answer { margin: 6px 8px 8px; font-size: 11px; line-height: 1.3; border-radius: 8px; padding: 5px 6px; background: var(--accent-soft); }
+  .answer b { color: var(--accent); }
+  .answer.short { background: var(--panel-2); color: var(--muted); }
+  .lane-pad { height: 8px; }
 
-  /* Played */
-  .played { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
-  .played::-webkit-scrollbar { display: none; }
+  /* Card strips */
+  .strip { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: none; }
+  .strip::-webkit-scrollbar { display: none; }
   .pcard { position: relative; flex: none; width: 58px; border: 0; padding: 0; background: none; text-align: center; }
   .pcard .art { width: 58px; height: 72px; }
-  .pcard span { display: block; font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .pcard span.lbl { display: block; font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
   .pcard i { position: absolute; top: -4px; right: -4px; width: 18px; height: 18px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); font-size: 11px; font-style: normal; line-height: 16px; color: var(--muted); }
+  .mine .pcard .art { outline: 2px solid transparent; outline-offset: 1px; }
+  .mine .pcard.hand .art { outline-color: var(--accent); }
+  .mine .pcard.played { opacity: .35; }
+  .mine .pcard.hand span.lbl { color: var(--accent); font-weight: 700; }
   .empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
+  .cta { display: block; width: 100%; text-align: left; border: 1px dashed var(--line); background: var(--panel); border-radius: 12px; padding: 12px; color: var(--muted); font-size: 13px; }
+  .cta b { color: var(--accent); }
+
+  .alerts { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .alert { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px 10px 6px 6px; font-size: 13px; }
+  .alert .art { width: 36px; height: 44px; }
+  .alert small { display: block; color: var(--muted); font-size: 11px; }
+  .alert .p { font-weight: 800; color: var(--accent); }
 
   .art { position: relative; border-radius: 8px; background: var(--panel-2); overflow: hidden; display: grid; place-items: center; }
   .art img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; transform: scale(1.25); }
-  .art .fallback { font-size: 10px; color: var(--muted); padding: 2px; }
+  .art .fallback { font-size: 10px; color: var(--muted); padding: 2px; text-align: center; }
 
   .search { position: sticky; top: calc(env(safe-area-inset-top) + 57px); z-index: 5; padding: 8px 0; background: var(--bg); }
-  .search input { width: 100%; height: 44px; border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 0 14px; font-size: 16px; }
+  .search input, .field { width: 100%; height: 44px; border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 0 14px; font-size: 16px; }
+  textarea.field { height: 96px; padding: 10px 14px; resize: vertical; font-size: 14px; }
   .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-top: 8px; }
   .res { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 4px 8px 4px 4px; text-align: left; min-height: 48px; }
   .res .art { width: 32px; height: 40px; flex: none; }
@@ -133,12 +153,37 @@
   .more { width: 100%; margin-top: 8px; height: 44px; border: 1px dashed var(--line); background: none; border-radius: 12px; color: var(--muted); }
   footer { color: var(--muted); font-size: 11px; margin-top: 24px; line-height: 1.5; }
 
+  /* Decks */
+  .deck { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px; box-shadow: var(--shadow); margin-bottom: 10px; }
+  .deck.active { border-color: var(--accent); }
+  .deck-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .deck-hd b { font-size: 15px; }
+  .deck-hd .badge { background: var(--accent); color: var(--accent-ink); }
+  .mini { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  .mini .art { aspect-ratio: 4 / 5; }
+  .deck-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .btn { height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-weight: 600; font-size: 14px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.danger { color: var(--bad); }
+  .slots { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+  .slot { border: 1px dashed var(--line); border-radius: 10px; aspect-ratio: 4 / 5; background: var(--panel); padding: 0; position: relative; overflow: hidden; }
+  .slot .art { width: 100%; height: 100%; border-radius: 0; }
+  .slot i { position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--panel); font-size: 11px; font-style: normal; line-height: 18px; color: var(--muted); }
+  .slot-name { position: absolute; left: 0; right: 0; bottom: 0; font-size: 10px; padding: 2px 3px; background: color-mix(in srgb, var(--panel) 85%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .note { font-size: 12px; color: var(--muted); margin: 6px 2px; }
+  .note.err { color: var(--bad); }
+
+  /* Bottom nav */
+  nav.tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid var(--line); padding: 6px 16px calc(env(safe-area-inset-bottom) + 6px); }
+  nav.tabbar div { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; }
+  nav.tabbar button { flex: 1; height: 44px; border: 0; border-radius: 12px; background: none; font-weight: 700; color: var(--muted); }
+  nav.tabbar button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+
   /* Toast + sheet */
-  .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 16px); transform: translate(-50%, 140%); transition: transform .2s ease; z-index: 30; background: var(--text); color: var(--bg); border-radius: 12px; padding: 0 6px 0 14px; display: flex; align-items: center; gap: 10px; height: 48px; max-width: calc(100vw - 32px); box-shadow: var(--shadow); }
+  .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 84px); transform: translate(-50%, 260%); transition: transform .2s ease; z-index: 30; background: var(--text); color: var(--bg); border-radius: 12px; padding: 0 6px 0 14px; display: flex; align-items: center; gap: 10px; height: 48px; max-width: calc(100vw - 32px); box-shadow: var(--shadow); }
   .toast.show { transform: translate(-50%, 0); }
   .toast span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .toast button { border: 0; background: none; color: var(--accent); font-weight: 800; height: 40px; padding: 0 10px; }
-  :root:not([data-theme="light"]) .toast button { color: var(--accent); }
   dialog { border: 0; padding: 0; margin: auto auto 0; width: 100%; max-width: 760px; max-height: 82vh; border-radius: 18px 18px 0 0; background: var(--panel); color: var(--text); }
   dialog::backdrop { background: rgb(0 0 0 / 45%); }
   .sheet-hd { position: sticky; top: 0; background: var(--panel); padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
@@ -165,21 +210,27 @@
 </head>
 <body>
 <header>
-  <div class="hdr">
+  <div class="hdr" id="gameHdr">
     <div class="brand">Snap Scout</div>
     <div class="stat"><button data-step="turn:-1" aria-label="Previous turn">−</button><div class="val tnum"><b id="turn"></b><small>Turn</small></div><button data-step="turn:1" aria-label="Next turn">+</button></div>
     <div class="stat energy"><button data-step="energy:-1" aria-label="Less energy">−</button><div class="val tnum"><b id="energy"></b><small id="energyLbl">Energy</small></div><button data-step="energy:1" aria-label="More energy">+</button></div>
-    <div class="stat"><button data-step="hand:-1" aria-label="Smaller hand">−</button><div class="val tnum"><b id="hand"></b><small id="handLbl">Hand</small></div><button data-step="hand:1" aria-label="Bigger hand">+</button></div>
+    <div class="stat"><button data-step="hand:-1" aria-label="Smaller opponent hand">−</button><div class="val tnum"><b id="hand"></b><small id="handLbl">Opp hand</small></div><button data-step="hand:1" aria-label="Bigger opponent hand">+</button></div>
     <button class="icon-btn" id="reset" aria-label="New game" title="New game">↺</button>
   </div>
+  <div class="hdr" id="decksHdr" hidden><div class="brand" style="display:block">My decks</div><button class="btn primary" id="newDeck">New deck</button></div>
 </header>
 
-<main>
-  <h2>Lanes <span class="right" id="laneHint"></span></h2>
+<main id="gameView">
+  <div id="banner"></div>
+  <h2>Lanes <span class="right" id="laneHint">Bars = cards on each side</span></h2>
   <div class="lanes" id="lanes"></div>
 
+  <h2>Your deck <span class="right" id="myDeckHint"></span></h2>
+  <div id="myDeck"></div>
+  <div class="alerts" id="alerts"></div>
+
   <h2>Opponent played <span class="right tnum" id="playedCount"></span></h2>
-  <div class="played" id="played"></div>
+  <div class="strip" id="played"></div>
   <div class="search"><input type="search" id="search" placeholder="Search a card the opponent played…" autocomplete="off" enterkeyhint="done"></div>
   <div class="results" id="results"></div>
 
@@ -193,6 +244,26 @@
   <footer id="footer"></footer>
 </main>
 
+<main id="decksView" hidden>
+  <div id="deckEditor" hidden>
+    <div class="deck active">
+      <input class="field" id="deckName" placeholder="Deck name" autocomplete="off">
+      <h2 style="margin-top:14px">Paste a deck code <span class="right">from Marvel Snap → Copy deck</span></h2>
+      <textarea class="field" id="deckPaste" placeholder="Paste the deck code (or card names, one per line)"></textarea>
+      <div class="deck-actions"><button class="btn" id="importDeck">Import</button></div>
+      <p class="note" id="importNote"></p>
+      <h2>Cards <span class="right tnum" id="slotCount"></span></h2>
+      <input type="search" class="field" id="deckSearch" placeholder="Add a card…" autocomplete="off">
+      <div class="results" id="deckResults"></div>
+      <div class="slots" id="slots"></div>
+      <div class="deck-actions"><button class="btn primary" id="saveDeck">Save deck</button><button class="btn" id="cancelDeck">Cancel</button></div>
+    </div>
+  </div>
+  <div id="deckList"></div>
+</main>
+
+<nav class="tabbar"><div><button id="tabGame" aria-current="page">Game</button><button id="tabDecks">My decks</button></div></nav>
+
 <div class="toast" id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="undo">Undo</button></div>
 
 <dialog id="locSheet">
@@ -204,8 +275,9 @@
 </dialog>
 
 <script type="module">
-import { Model, handProbability, nextPlayLikelihood, opponentThreat, laneStatus } from './model.js';
-import { locationEffect, effectiveCost, laneRules } from './locations.js';
+import { Model, handProbability, nextPlayLikelihood, opponentThreat } from './model.js';
+import { locationEffect, boardModifiers, laneRules, evaluateBoard, KIND_LABEL } from './locations.js';
+import { parseDeck, deckCode, counterAlerts, bestAnswer, COUNTERS } from './decks.js';
 
 const ART = (file, w = 96) => (file ? `https://i0.wp.com/marvelsnapzone.com/wp-content/themes/blocksy-child/assets/media/cards/${file}?w=${w}` : '');
 
@@ -218,165 +290,271 @@ const cards = new Map(cardData.cards.map((c) => [c.id, c]));
 const locations = new Map(locData.locations.map((l) => [l.id, l]));
 const model = new Model(deckData.ids, deckData.decks);
 
-// ---- State --------------------------------------------------------------
-const STORE = 'snap-scout-v2';
-const fresh = () => ({
-  turn: 1, energy: null, hand: null, played: [], sort: 'next', showAll: false,
-  lanes: [0, 1, 2].map(() => ({ loc: null, mine: 0, theirs: 0, oppCards: 0 })),
-});
-let state = fresh();
-try { const s = JSON.parse(localStorage.getItem(STORE) || 'null'); if (s && Array.isArray(s.lanes)) state = { ...state, ...s }; } catch {}
-const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {} };
+// Average printed power by cost, for random-transform locations.
+const avgByCost = new Map();
+for (const c of cardData.cards) {
+  if (c.generated) continue;
+  const k = Math.min(6, c.cost);
+  const a = avgByCost.get(k) || [0, 0];
+  avgByCost.set(k, [a[0] + c.power, a[1] + 1]);
+}
+const avgPower = (cost) => { const a = avgByCost.get(Math.min(6, Math.max(0, cost))); return a ? a[0] / a[1] : 0; };
 
-// Energy defaults to the turn; hand to 3 + turn − cards played. Tapping a
-// stepper overrides until the turn changes.
+// ---- State --------------------------------------------------------------
+// Game state and saved decks are kept on this device only.
+const STORE = 'snap-scout-v3';
+const DECKS = 'snap-scout-decks';
+const freshLane = () => ({ loc: null, mine: 0, theirs: 0, myCards: 0, oppCards: 0 });
+const fresh = () => ({ turn: 1, energy: null, hand: null, played: [], mine: {}, sort: 'next', showAll: false, lanes: [0, 1, 2].map(freshLane) });
+let state = fresh();
+let decks = { list: [], active: null };
+const load = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
+const s0 = load(STORE) || load('snap-scout-v2');
+if (s0 && Array.isArray(s0.lanes)) state = { ...state, ...s0, lanes: s0.lanes.map((l) => ({ ...freshLane(), ...l })), mine: s0.mine || {} };
+const d0 = load(DECKS);
+if (d0 && Array.isArray(d0.list)) decks = d0;
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); localStorage.setItem(DECKS, JSON.stringify(decks)); } catch {} };
+let view = 'game';
+
 const energy = () => state.energy ?? state.turn;
 const handSize = () => state.hand ?? Math.max(0, Math.min(7, 3 + state.turn - state.played.length));
+const activeDeck = () => decks.list.find((d) => d.id === decks.active) || null;
 
 // ---- Helpers ------------------------------------------------------------
 const $ = (id) => document.getElementById(id);
 const pct = (p) => (p >= 0.995 ? '99%' : p < 0.01 && p > 0 ? '<1%' : `${Math.round(p * 100)}%`);
 const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const artHtml = (file, alt) => `<span class="art">${file ? `<img src="${ART(file)}" alt="" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'fallback',textContent:${esc(JSON.stringify(alt))}}))">` : `<span class="fallback">${esc(alt)}</span>`}</span>`;
-const notModelled = (c) => (c.ongoing ? 'Ongoing' : ''); // other abilities are flagged in the lane threat
-const activeLocs = () => state.lanes.map((l) => l.loc).filter(Boolean);
+const nameOf = (id) => cards.get(id)?.name ?? id;
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
-// ---- Predictions --------------------------------------------------------
-function predictions() {
+// ---- Game computation --------------------------------------------------
+function compute() {
+  const mods = boardModifiers(state.lanes, state.turn, avgPower);
   const seen = model.toIndices(state.played);
   const { probs, alpha } = model.predict(seen);
   const played = new Set(state.played);
-  const locs = activeLocs();
+  const oppEnergy = energy() + mods.oppEnergy;
+  const myEnergy = energy() + mods.myEnergy;
   const rows = [];
   probs.forEach((p, i) => {
     const id = model.ids[i];
     const c = cards.get(id);
     if (!c || played.has(id) || p < 0.005) return;
-    const cost = effectiveCost(c, locs, state.turn);
+    const cost = mods.costOf(c);
     const pHand = handProbability(p, handSize(), state.played.length);
-    rows.push({ ...c, baseCost: c.cost, cost, pDeck: p, pHand, pNext: nextPlayLikelihood(pHand, cost, energy()) });
+    rows.push({ ...c, baseCost: c.cost, cost, power: mods.powerOf(c), pDeck: p, pHand, pNext: nextPlayLikelihood(pHand, cost, oppEnergy) });
   });
-  return { rows, alpha };
+  const threatFor = (i) => opponentThreat(rows, oppEnergy, laneRules(state.lanes, i, state.turn, 'opp', avgPower, mods));
+  const board = evaluateBoard(state.lanes, state.turn, threatFor, avgPower);
+
+  // My side: cards in hand if any are marked, otherwise everything not yet played.
+  const deck = activeDeck();
+  let myRows = [], myFrom = '';
+  if (deck) {
+    const status = (id) => state.mine[id] || 'deck';
+    const hand = deck.cards.filter((id) => status(id) === 'hand');
+    const pool = hand.length ? hand : deck.cards.filter((id) => status(id) !== 'played');
+    myFrom = hand.length ? 'hand' : 'deck';
+    myRows = pool.map((id) => cards.get(id)).filter(Boolean).map((c) => ({ ...c, cost: mods.costOf(c), power: mods.powerOf(c) }));
+  }
+  const answers = board.map((b, i) => {
+    if (!deck || b.status === 'safe' || b.status === 'closed' || b.scoring) return null;
+    const target = b.status === 'at-risk' ? b.holdNeed : b.holdNeed || b.need;
+    return bestAnswer(myRows, myEnergy, laneRules(state.lanes, i, state.turn, 'me', avgPower, mods), target);
+  });
+  return { rows, alpha, mods, board, answers, myFrom, oppEnergy, myEnergy };
 }
 
-// ---- Render -------------------------------------------------------------
-function renderHeader() {
+// ---- Render: game -------------------------------------------------------
+function renderHeader(c) {
   $('turn').textContent = state.turn;
   $('energy').textContent = energy();
   $('energyLbl').className = state.energy == null ? 'auto' : '';
   $('hand').textContent = handSize();
   $('handLbl').className = state.hand == null ? 'auto' : '';
+  const notes = [];
+  if (state.turn === c.mods.lastTurn) notes.push('Final turn: the game ends after this one.');
+  if (c.oppEnergy !== energy()) notes.push(`Opponent has ${c.oppEnergy} energy this turn from locations.`);
+  if (c.myEnergy !== energy() && activeDeck()) notes.push(`You have ${c.myEnergy} energy this turn from locations.`);
+  if (c.mods.forced.length) notes.push(`All cards must be played at Location ${c.mods.forced[0] + 1} this turn.`);
+  $('banner').innerHTML = notes.map((n) => `<div class="banner">${esc(n)}</div>`).join('');
 }
 
-function renderLanes(rows) {
+function renderLanes(c) {
   const html = state.lanes.map((lane, i) => {
     const loc = lane.loc && locations.get(lane.loc);
     const fx = locationEffect(lane.loc);
-    const rules = laneRules(lane.loc, { turn: state.turn, oppCardsHere: lane.oppCards });
-    const threat = opponentThreat(rows, energy(), rules);
-    const s = laneStatus(lane.mine, lane.theirs, threat.power);
-    let verdict;
-    if (s.status === 'losing') verdict = `Need +${s.need}<small>${threat.power ? `+${s.needVsThreat} to hold vs. threat` : 'to win'}</small>`;
-    else if (s.status === 'safe') verdict = `Safe by ${s.margin}<small>even vs. +${threat.power}</small>`;
-    else verdict = `At risk<small>+${s.needVsThreat} to hold</small>`;
-    const closed = rules.capacity === 0 || !threat.cards.length;
-    const threatHtml = threat.cards.length
-      ? `Opp could add <b>+${threat.power}</b>: ${threat.cards.map((c) => esc(c.name)).join(' + ')}${threat.notModelled.length ? ` <span class="nm">· ${threat.notModelled.length} ability not modelled</span>` : ''}`
-      : rules.capacity === 0 ? 'Opponent side is full.' : 'No likely affordable plays here.';
+    const b = c.board[i];
+    const t = b.threat;
+    const threatHtml = b.status === 'closed' ? '' : t.cards.length
+      ? `Opp could add <b>+${t.power}</b>: ${t.cards.map((x) => esc(x.name)).join(' + ')}${t.notModelled.length ? ` <span class="nm">· ${plural(t.notModelled.length, 'ability')} not modelled</span>` : ''}`
+      : 'No likely affordable plays here.';
+    const notes = b.notes.map((n) => `<br>${esc(n)}`).join('');
+    const a = c.answers[i];
+    const answer = !a ? '' : `<div class="answer ${a.enough ? '' : 'short'}">${a.enough ? 'Play' : 'Best:'} <b>${a.cards.map((x) => esc(x.name)).join(' + ')}</b> (+${Math.round(a.power)}, ${a.cost}⚡)${a.enough ? '' : ' – not enough'}</div>`;
+    const pips = (side, n) => `<div class="pips" aria-label="${side === 'opp' ? 'Opponent' : 'My'} cards here">${[1, 2, 3, 4].map((k) => `<button class="${n >= k ? 'on' : ''}" data-pip="${i}:${side}:${k}" aria-label="${k} cards"></button>`).join('')}</div>`;
     return `<div class="lane">
       <button class="loc" data-loc="${i}" aria-label="Set location ${i + 1}">
         ${loc ? `<img src="${ART(loc.art, 240)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
         <span class="loc-txt">${loc ? `<span class="loc-name">${esc(loc.name)}</span>` : `<span class="loc-empty">Location ${i + 1}<br>Tap to set</span>`}</span>
       </button>
-      ${loc ? `<div class="loc-fx" title="${esc(loc.ability)}">${esc(loc.ability || 'No effect.')}</div><div class="side"><span class="badge ${fx ? 'ok' : 'no'}">${fx ? 'Modelled' : 'Not modelled'}</span></div>` : ''}
-      <div class="side"><label>Opponent${lane.oppCards ? ` · ${lane.oppCards} card${lane.oppCards > 1 ? 's' : ''}` : ''}</label>
+      ${loc ? `<div class="loc-fx" title="${esc(loc.ability)}">${esc(fx?.note || loc.ability || 'No effect.')}</div><div class="side"><span class="badge ${fx?.kind || 'none'}">${KIND_LABEL[fx?.kind || 'none']}</span></div>` : ''}
+      <div class="side"><label>Opponent</label>
         <div class="pw opp"><button data-pw="${i}:theirs:-1" aria-label="Opponent power down">−</button><input class="tnum" inputmode="numeric" type="number" data-lane="${i}:theirs" value="${lane.theirs}" aria-label="Opponent power lane ${i + 1}"><button data-pw="${i}:theirs:1" aria-label="Opponent power up">+</button></div>
-        <div class="pips" aria-label="Opponent cards here">${[1, 2, 3, 4].map((n) => `<button class="${lane.oppCards >= n ? 'on' : ''}" data-pip="${i}:${n}" aria-label="${n} opponent cards here"></button>`).join('')}</div>
+        ${pips('opp', lane.oppCards)}
       </div>
       <div class="side"><label>Me</label>
         <div class="pw"><button data-pw="${i}:mine:-1" aria-label="My power down">−</button><input class="tnum" inputmode="numeric" type="number" data-lane="${i}:mine" value="${lane.mine}" aria-label="My power lane ${i + 1}"><button data-pw="${i}:mine:1" aria-label="My power up">+</button></div>
+        ${pips('me', lane.myCards)}
       </div>
-      <div class="verdict ${s.status}">${verdict}</div>
-      <div class="threat">${threatHtml}</div>
+      <div class="verdict ${b.status}">${esc(b.headline)}<small>${esc(b.sub)}</small></div>
+      <div class="threat">${threatHtml}${notes}</div>
+      ${answer || '<div class="lane-pad"></div>'}
     </div>`;
   });
   $('lanes').innerHTML = html.join('');
-  $('laneHint').textContent = 'Tap bars to count opp cards';
+}
+
+function renderMyDeck(c) {
+  const deck = activeDeck();
+  if (!deck) {
+    $('myDeckHint').textContent = '';
+    $('myDeck').innerHTML = `<button class="cta" data-go="decks"><b>Add your deck</b> to get counter alerts and the best play for each lane.</button>`;
+    $('alerts').innerHTML = '';
+    return;
+  }
+  $('myDeckHint').textContent = `${deck.name} · tap: hand → played`;
+  const st = (id) => state.mine[id] || 'deck';
+  $('myDeck').innerHTML = `<div class="strip mine">${deck.cards.map((id) => {
+    const card = cards.get(id);
+    return `<button class="pcard ${st(id)}" data-mine="${id}" aria-label="${esc(nameOf(id))}: ${st(id)}">${artHtml(card?.art, nameOf(id))}<span class="lbl">${st(id) === 'hand' ? 'In hand' : st(id) === 'played' ? 'Played' : esc(nameOf(id))}</span></button>`;
+  }).join('')}</div>`;
+  const remaining = deck.cards.filter((id) => st(id) !== 'played');
+  const alerts = counterAlerts(remaining, state.played, c.rows, cards);
+  $('alerts').innerHTML = alerts.map((a) => {
+    const card = cards.get(a.id);
+    const targets = a.onBoard.length
+      ? `On board: ${a.onBoard.map((x) => esc(x.name)).join(', ')}`
+      : `Likely: ${a.likely.map((x) => `${esc(x.name)} ${pct(x.pDeck)}`).join(', ')}`;
+    return `<div class="alert">${artHtml(card?.art, card?.name ?? a.id)}<span><b>${esc(card?.name ?? a.id)}</b> ${esc(a.why)}<small>${targets}</small></span><span class="p tnum">${a.onBoard.length ? 'Now' : pct(a.pAny)}</span></div>`;
+  }).join('');
 }
 
 function renderPlayed() {
   $('playedCount').textContent = `${state.played.length}/12`;
   $('played').innerHTML = state.played.length
-    ? state.played.map((id, i) => {
-        const c = cards.get(id);
-        return `<button class="pcard" data-remove="${i}" aria-label="Remove ${esc(c?.name ?? id)}">${artHtml(c?.art, c?.name ?? id)}<span>${esc(c?.name ?? id)}</span><i>✕</i></button>`;
-      }).reverse().join('')
+    ? state.played.map((id, i) => `<button class="pcard" data-remove="${i}" aria-label="Remove ${esc(nameOf(id))}">${artHtml(cards.get(id)?.art, nameOf(id))}<span class="lbl">${esc(nameOf(id))}</span><i>✕</i></button>`).reverse().join('')
     : '<div class="empty">Tap a card below as your opponent plays it.</div>';
 }
 
-function renderList(rows, alpha) {
+function renderList(c) {
+  const rows = c.rows;
   const key = { deck: 'pDeck', hand: 'pHand', next: 'pNext' }[state.sort];
   const label = { deck: 'in deck', hand: 'in hand', next: 'next play' }[state.sort];
   rows.sort((a, b) => b[key] - a[key] || b.pDeck - a.pDeck);
   for (const b of $('sortTabs').children) b.setAttribute('aria-pressed', String(b.dataset.sort === state.sort));
-  const n = state.played.length;
-  $('matchInfo').textContent = !n
+  $('matchInfo').textContent = !state.played.length
     ? 'Most-played cards in the current meta. Tap one when the opponent plays it.'
-    : alpha > 0.05 ? `Matches a known deck (${Math.round(alpha * 100)}% weight) plus card co-occurrence.` : 'Based on cards that appear alongside what you’ve seen.';
+    : c.alpha > 0.05 ? `Matches a known deck (${Math.round(c.alpha * 100)}% weight) plus card co-occurrence.` : 'Based on cards that appear alongside what you’ve seen.';
   const limit = state.showAll ? 60 : 20;
-  $('list').innerHTML = rows.slice(0, limit).map((r) => {
-    const nm = notModelled(r);
-    return `<button class="row" data-add="${r.id}">
+  $('list').innerHTML = rows.slice(0, limit).map((r) => `<button class="row" data-add="${r.id}">
       ${artHtml(r.art, r.name)}
       <span style="min-width:0">
         <span class="nm-line"><b>${esc(r.name)}</b><span class="cp"><span class="cost ${r.cost !== r.baseCost ? 'mod' : ''}">${r.cost}</span><span class="pow">${r.power}</span></span></span>
-        <span class="sub tnum"><span>${pct(r.pDeck)} deck</span><span>${pct(r.pHand)} hand</span>${nm ? `<span class="nm">${nm}</span>` : ''}</span>
+        <span class="sub tnum"><span>${pct(r.pDeck)} deck</span><span>${pct(r.pHand)} hand</span>${r.ongoing ? '<span class="nm">Ongoing</span>' : ''}</span>
         <span class="bar"><i style="width:${Math.min(100, Math.round(r[key] * 100))}%"></i></span>
       </span>
       <span class="big tnum"><b>${pct(r[key])}</b><small>${label}</small></span>
-    </button>`;
-  }).join('');
-  $('more').hidden = rows.length <= limit && !state.showAll;
+    </button>`).join('');
+  $('more').hidden = rows.length <= 20;
   $('more').textContent = state.showAll ? 'Show fewer' : `Show more (${Math.min(rows.length, 60) - 20})`;
-}
-
-function render() {
-  const { rows, alpha } = predictions();
-  renderHeader();
-  renderLanes(rows);
-  renderPlayed();
-  renderList(rows, alpha);
-  renderSearch();
-  $('footer').innerHTML = `${deckData.decks.length.toLocaleString()} decklists (${esc(deckData.source)}), cards and locations from Marvel Snap Zone, fetched ${esc(deckData.fetched)}.<br>Lane totals you enter already include effects on the board. Threats use printed power plus modelled location effects; card abilities are not modelled. Hand odds assume a random hand.`;
-  save();
 }
 
 function renderSearch() {
   const q = $('search').value.trim().toLowerCase();
   if (!q) { $('results').innerHTML = ''; return; }
   const played = new Set(state.played);
-  const hits = cardData.cards
-    .filter((c) => !played.has(c.id) && c.name.toLowerCase().includes(q))
-    .sort((a, b) => (a.generated ? 1 : 0) - (b.generated ? 1 : 0) || a.name.toLowerCase().indexOf(q) - b.name.toLowerCase().indexOf(q))
-    .slice(0, 12);
-  $('results').innerHTML = hits.map((c) => `<button class="res" data-add="${c.id}">${artHtml(c.art, c.name)}<span><b>${esc(c.name)}</b><small>${c.cost} cost · ${c.power} power${c.generated ? ' · generated' : ''}</small></span></button>`).join('')
-    || '<div class="empty">No card matches.</div>';
+  $('results').innerHTML = searchCards(q, played).map((c) => resHtml(c, 'add')).join('') || '<div class="empty">No card matches.</div>';
+}
+const searchCards = (q, exclude) => cardData.cards
+  .filter((c) => !exclude.has(c.id) && c.name.toLowerCase().includes(q))
+  .sort((a, b) => (a.generated ? 1 : 0) - (b.generated ? 1 : 0) || a.name.toLowerCase().indexOf(q) - b.name.toLowerCase().indexOf(q))
+  .slice(0, 12);
+const resHtml = (c, attr) => `<button class="res" data-${attr}="${c.id}">${artHtml(c.art, c.name)}<span><b>${esc(c.name)}</b><small>${c.cost} cost · ${c.power} power${c.generated ? ' · generated' : ''}</small></span></button>`;
+
+// ---- Render: decks ------------------------------------------------------
+let editing = null; // { id, name, cards }
+function renderDecks() {
+  $('deckEditor').hidden = !editing;
+  $('deckList').hidden = !!editing;
+  $('newDeck').hidden = !!editing;
+  if (editing) return renderEditor();
+  $('deckList').innerHTML = decks.list.length ? decks.list.map((d) => `<div class="deck ${d.id === decks.active ? 'active' : ''}">
+      <div class="deck-hd"><b>${esc(d.name)}</b>${d.id === decks.active ? '<span class="badge">In use</span>' : ''}<span class="note" style="margin:0 0 0 auto">${d.cards.length}/12</span></div>
+      <div class="mini">${d.cards.map((id) => artHtml(cards.get(id)?.art, nameOf(id))).join('')}</div>
+      <div class="deck-actions">
+        ${d.id === decks.active ? '' : `<button class="btn primary" data-use="${d.id}">Use this deck</button>`}
+        <button class="btn" data-edit="${d.id}">Edit</button>
+        <button class="btn" data-copy="${d.id}">Copy code</button>
+        <button class="btn danger" data-del="${d.id}">Delete</button>
+      </div>
+      ${counterSummary(d)}
+    </div>`).join('')
+    : '<div class="empty">No decks yet. Tap <b>New deck</b>, then paste a deck code from Marvel Snap (Decks → your deck → Copy) or add cards one by one.</div>';
+}
+function counterSummary(d) {
+  const tech = d.cards.filter((id) => COUNTERS[id]);
+  return tech.length ? `<p class="note">Counters Scout will watch for: ${tech.map((id) => `${esc(nameOf(id))} (${esc(COUNTERS[id].why)})`).join('; ')}.</p>` : '';
+}
+function renderEditor() {
+  $('slotCount').textContent = `${editing.cards.length}/12`;
+  $('slots').innerHTML = Array.from({ length: 12 }, (_, i) => {
+    const id = editing.cards[i];
+    if (!id) return '<div class="slot"></div>';
+    return `<button class="slot" data-unslot="${i}" aria-label="Remove ${esc(nameOf(id))}">${artHtml(cards.get(id)?.art, nameOf(id))}<span class="slot-name">${esc(nameOf(id))}</span><i>✕</i></button>`;
+  }).join('');
+  const q = $('deckSearch').value.trim().toLowerCase();
+  $('deckResults').innerHTML = q ? searchCards(q, new Set(editing.cards)).filter((c) => !c.generated).map((c) => resHtml(c, 'slot')).join('') || '<div class="empty">No card matches.</div>' : '';
+}
+
+function render() {
+  $('gameView').hidden = view !== 'game';
+  $('decksView').hidden = view !== 'decks';
+  $('gameHdr').hidden = view !== 'game';
+  $('decksHdr').hidden = view !== 'decks';
+  for (const [id, v] of [['tabGame', 'game'], ['tabDecks', 'decks']]) {
+    if (view === v) $(id).setAttribute('aria-current', 'page'); else $(id).removeAttribute('aria-current');
+  }
+  if (view === 'decks') renderDecks();
+  else {
+    const c = compute();
+    renderHeader(c);
+    renderLanes(c);
+    renderMyDeck(c);
+    renderPlayed();
+    renderList(c);
+    renderSearch();
+    $('footer').innerHTML = `${deckData.decks.length.toLocaleString()} decklists (${esc(deckData.source)}), cards and locations from Marvel Snap Zone, fetched ${esc(deckData.fetched)}.<br>Lane totals you enter already include effects on the board. Threats use printed power plus location effects; card abilities are not modelled. Your saved decks stay on this device.`;
+  }
+  save();
 }
 
 // ---- Toast / undo -------------------------------------------------------
 let undoState = null, toastTimer;
 function toast(msg, prev) {
-  undoState = prev;
+  undoState = prev || null;
+  $('undo').hidden = !prev;
   $('toastMsg').textContent = msg;
   $('toast').classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => $('toast').classList.remove('show'), 3500);
 }
 $('undo').addEventListener('click', () => {
-  if (undoState) { state = undoState; undoState = null; render(); }
+  if (undoState) { ({ state, decks } = undoState); undoState = null; render(); }
   $('toast').classList.remove('show');
 });
-const snapshot = () => JSON.parse(JSON.stringify(state));
+const snapshot = () => JSON.parse(JSON.stringify({ state, decks }));
 
 // ---- Location sheet -----------------------------------------------------
 let sheetLane = 0;
@@ -390,8 +568,10 @@ function openSheet(i) {
 function renderLocList() {
   const q = $('locSearch').value.trim().toLowerCase();
   const list = locData.locations.filter((l) => !q || l.name.toLowerCase().includes(q) || l.ability.toLowerCase().includes(q)).slice(0, 60);
-  $('locList').innerHTML = list.map((l) => `<button class="lrow" data-pick="${l.id}">${artHtml(l.art, l.name)}<span><b>${esc(l.name)}</b>${locationEffect(l.id) ? ' <span class="badge ok">Modelled</span>' : ''}<p>${esc(l.ability)}</p></span></button>`).join('')
-    || '<div class="empty">No location matches.</div>';
+  $('locList').innerHTML = list.map((l) => {
+    const fx = locationEffect(l.id);
+    return `<button class="lrow" data-pick="${l.id}">${artHtml(l.art, l.name)}<span><b>${esc(l.name)}</b> <span class="badge ${fx?.kind || 'none'}">${KIND_LABEL[fx?.kind || 'none']}</span><p>${esc(l.ability)}</p></span></button>`;
+  }).join('') || '<div class="empty">No location matches.</div>';
 }
 $('locSearch').addEventListener('input', renderLocList);
 $('locClose').addEventListener('click', () => $('locSheet').close());
@@ -406,51 +586,89 @@ $('locSheet').addEventListener('click', (e) => {
 });
 
 // ---- Events -------------------------------------------------------------
-document.querySelector('main').addEventListener('click', onClick);
-document.querySelector('header').addEventListener('click', onClick);
-function onClick(e) {
+document.body.addEventListener('click', (e) => {
   const t = e.target.closest('button');
-  if (!t) return;
+  if (!t || t.closest('dialog') || t.id === 'undo') return;
   const d = t.dataset;
-  if (d.add) {
+  if (t.id === 'tabGame' || d.go === 'game') { view = 'game'; editing = null; }
+  else if (t.id === 'tabDecks' || d.go === 'decks') { view = 'decks'; if (!decks.list.length) startEdit(); }
+  else if (d.add) {
     if (state.played.length >= 12) return toast('Opponent already has 12 cards played.');
     const prev = snapshot();
     state.played.push(d.add);
     $('search').value = '';
-    toast(`Added ${cards.get(d.add)?.name ?? d.add}`, prev);
+    toast(`Added ${nameOf(d.add)}`, prev);
   } else if (d.remove !== undefined) {
     const prev = snapshot();
     const [id] = state.played.splice(Number(d.remove), 1);
-    toast(`Removed ${cards.get(id)?.name ?? id}`, prev);
+    toast(`Removed ${nameOf(id)}`, prev);
+  } else if (d.mine) {
+    const next = { deck: 'hand', hand: 'played', played: 'deck' }[state.mine[d.mine] || 'deck'];
+    if (next === 'deck') delete state.mine[d.mine]; else state.mine[d.mine] = next;
   } else if (d.step) {
     const [k, delta] = d.step.split(':');
     const n = Number(delta);
-    if (k === 'turn') {
-      state.turn = Math.min(7, Math.max(1, state.turn + n));
-      state.energy = null; state.hand = null;
-    } else if (k === 'energy') {
-      state.energy = Math.min(15, Math.max(0, energy() + n));
-    } else {
-      state.hand = Math.min(7, Math.max(0, handSize() + n));
-    }
+    if (k === 'turn') { state.turn = Math.min(7, Math.max(1, state.turn + n)); state.energy = null; state.hand = null; }
+    else if (k === 'energy') state.energy = Math.min(15, Math.max(0, energy() + n));
+    else state.hand = Math.min(7, Math.max(0, handSize() + n));
   } else if (d.pw) {
     const [i, side, delta] = d.pw.split(':');
     state.lanes[i][side] = (state.lanes[i][side] || 0) + Number(delta);
   } else if (d.pip) {
-    const [i, n] = d.pip.split(':').map(Number);
-    state.lanes[i].oppCards = state.lanes[i].oppCards === n ? n - 1 : n;
-  } else if (d.loc !== undefined) {
-    return openSheet(Number(d.loc));
-  } else if (d.sort) {
-    state.sort = d.sort;
-  } else if (t.id === 'more') {
-    state.showAll = !state.showAll;
-  } else if (t.id === 'reset') {
+    const [i, side, k] = d.pip.split(':');
+    const key = side === 'opp' ? 'oppCards' : 'myCards';
+    const n = Number(k);
+    state.lanes[i][key] = state.lanes[i][key] === n ? n - 1 : n;
+  } else if (d.loc !== undefined) return openSheet(Number(d.loc));
+  else if (d.sort) state.sort = d.sort;
+  else if (t.id === 'more') state.showAll = !state.showAll;
+  else if (t.id === 'reset') {
     const prev = snapshot();
     state = { ...fresh(), sort: state.sort };
     toast('New game', prev);
-  } else return;
+  }
+  // Decks
+  else if (t.id === 'newDeck') startEdit();
+  else if (d.edit) startEdit(decks.list.find((x) => x.id === d.edit));
+  else if (d.use) { decks.active = d.use; state.mine = {}; toast('Deck in use for the next game'); }
+  else if (d.copy) {
+    const deck = decks.list.find((x) => x.id === d.copy);
+    const code = deckCode(deck.cards);
+    navigator.clipboard?.writeText(code).then(() => toast('Deck code copied'), () => toast('Couldn’t copy; long-press to copy instead'));
+  } else if (d.del) {
+    const prev = snapshot();
+    decks.list = decks.list.filter((x) => x.id !== d.del);
+    if (decks.active === d.del) decks.active = decks.list[0]?.id || null;
+    toast('Deck deleted', prev);
+  } else if (d.slot) { if (editing.cards.length < 12) editing.cards.push(d.slot); $('deckSearch').value = ''; }
+  else if (d.unslot !== undefined) editing.cards.splice(Number(d.unslot), 1);
+  else if (t.id === 'importDeck') {
+    const r = parseDeck($('deckPaste').value, cardData.cards);
+    if (!r.cards.length) { $('importNote').className = 'note err'; $('importNote').textContent = 'Couldn’t read that. Paste the code from Marvel Snap’s Copy button, or card names one per line.'; return; }
+    editing.cards = r.cards;
+    if (r.name && !$('deckName').value) $('deckName').value = r.name;
+    $('importNote').className = r.unknown.length ? 'note err' : 'note';
+    $('importNote').textContent = `Imported ${plural(r.cards.length, 'card')}.${r.unknown.length ? ` Not recognised: ${r.unknown.join(', ')}.` : ''}`;
+    $('deckPaste').value = '';
+  } else if (t.id === 'saveDeck') {
+    if (!editing.cards.length) { $('importNote').className = 'note err'; $('importNote').textContent = 'Add at least one card first.'; return; }
+    const name = $('deckName').value.trim() || `Deck ${decks.list.length + 1}`;
+    const deck = { id: editing.id || `d${Date.now().toString(36)}`, name, cards: editing.cards };
+    const i = decks.list.findIndex((x) => x.id === deck.id);
+    if (i >= 0) decks.list[i] = deck; else decks.list.push(deck);
+    if (!decks.active || !decks.list.some((x) => x.id === decks.active)) decks.active = deck.id;
+    editing = null;
+    toast(`Saved ${name}`);
+  } else if (t.id === 'cancelDeck') editing = null;
+  else return;
   render();
+});
+function startEdit(deck) {
+  editing = deck ? { id: deck.id, cards: [...deck.cards] } : { id: null, cards: [] };
+  $('deckName').value = deck?.name || '';
+  $('deckPaste').value = '';
+  $('deckSearch').value = '';
+  $('importNote').textContent = '';
 }
 document.addEventListener('change', (e) => {
   const lane = e.target.dataset?.lane;
@@ -461,6 +679,7 @@ document.addEventListener('change', (e) => {
 });
 document.addEventListener('focusin', (e) => { if (e.target.dataset?.lane) e.target.select(); });
 $('search').addEventListener('input', renderSearch);
+$('deckSearch').addEventListener('input', renderEditor);
 render();
 </script>
 </body>
