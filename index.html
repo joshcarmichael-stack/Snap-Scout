@@ -291,6 +291,7 @@
   <div class="alerts" id="alerts"></div>
 
   <h2>Opponent played <span class="right tnum" id="playedCount"></span></h2>
+  <button class="cta" id="gameStartBtn" style="margin-bottom:8px">Opponent had a <b>Game Start</b> card (High Evolutionary, Thanos, Agamotto, Kang…)? Tap to log it.</button>
   <div class="strip" id="played"></div>
   <div class="search"><input type="search" id="search" placeholder="Search a card the opponent played…" autocomplete="off" enterkeyhint="done"></div>
   <div class="results" id="results"></div>
@@ -360,7 +361,7 @@
 import { Model, handProbability, nextPlayLikelihood, opponentThreat } from './model.js';
 import { locationEffect, boardModifiers, laneRules, evaluateBoard, KIND_LABEL } from './locations.js';
 import { parseDeck, deckCode, counterAlerts, bestAnswer, COUNTERS } from './decks.js';
-import { buildBoard } from './engine.js';
+import { buildBoard, EVOLVED } from './engine.js';
 import { ABILITIES } from './abilities.js';
 import { winChance, snapAdvice } from './sim.js';
 
@@ -429,7 +430,8 @@ let seq = Date.now() % 100000;
 const newUid = () => `e${(++seq).toString(36)}`;
 
 const energy = () => state.energy ?? state.turn;
-const oppDeckEvents = () => state.events.filter((e) => e.side === 'opp' && (e.t === 'play' || e.t === 'log'));
+const oppDeckEvents = () => state.events.filter((e) => e.side === 'opp' && (e.t === 'play' || e.t === 'log' || e.t === 'start'));
+const isGameStart = (id) => /Game Start/i.test(cards.get(id)?.ability || '');
 const myPlays = () => state.events.filter((e) => e.side === 'me' && e.t === 'play');
 const handSize = () => state.hand ?? Math.max(0, Math.min(7, 3 + state.turn - oppDeckEvents().length));
 const activeDeck = () => decks.list.find((d) => d.id === decks.active) || null;
@@ -443,7 +445,9 @@ const nameOf = (id) => cards.get(id)?.name ?? id;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const locName = (i) => (state.lanes[i].loc && locations.get(state.lanes[i].loc)?.name) || `Location ${i + 1}`;
 const abilityKind = (id) => { const a = ABILITIES[id]; if (a) return a.kind; return cards.get(id)?.special ? 'unmodelled' : 'modelled'; };
-const abilityNote = (id) => ABILITIES[id]?.note || (cards.get(id)?.special ? 'Ability not modelled: printed Power only.' : 'No ability.');
+// High Evolutionary (logged at Game Start, or in your deck) evolves no-ability cards.
+const evolvedFor = (side) => (side === 'opp' ? state.events.some((e) => e.t === 'start' && e.side === 'opp' && e.id === 'HighEvolutionary') : !!activeDeck()?.cards.includes('HighEvolutionary'));
+const abilityNote = (id, side) => (side && evolvedFor(side) && EVOLVED[id] ? ABILITIES[EVOLVED[id]].note : null) || ABILITIES[id]?.note || (cards.get(id)?.special ? 'Ability not modelled: printed Power only.' : 'No ability.');
 
 // ---- Game computation --------------------------------------------------
 // Cards that hand/deck effects put on the board (Anti-Polar Magneto, Jubilee…):
@@ -459,8 +463,14 @@ function makeGuess() {
     return id || null;
   };
 }
+// Your own Game Start cards come straight from your saved deck.
+function withMyStarts(events) {
+  const deck = activeDeck();
+  const mine = deck ? deck.cards.filter(isGameStart).map((id) => ({ t: 'start', uid: `mystart-${id}`, side: 'me', id, turn: 1 })) : [];
+  return mine.length ? [...mine, ...events] : events;
+}
 function boardFor(events) {
-  return buildBoard(events, { cards, lanes: state.lanes, turn: state.turn, avgPower, guess: makeGuess() });
+  return buildBoard(withMyStarts(events), { cards, lanes: state.lanes, turn: state.turn, avgPower, guess: makeGuess() });
 }
 function lanesFrom(board) {
   return state.lanes.map((l, i) => ({
@@ -577,7 +587,7 @@ function runWin(c, deck, key) {
   const handIds = left.filter((id) => state.mine[id] === 'hand');
   const myHand = [...handIds.map((id) => ({ id })), ...state.myExtra.filter((x) => !x.played).map((x) => ({ id: x.id, power: x.power }))];
   const opts = {
-    events: state.events, lanes: state.lanes, turn: state.turn, lastTurn, cards, avgPower,
+    events: withMyStarts(state.events), lanes: state.lanes, turn: state.turn, lastTurn, cards, avgPower,
     oppRows: c.rows.map((r) => ({ id: r.id, pDeck: r.pDeck })), oppSeen: c.seenIds.length, oppHand: handSize(),
     makeGuess,
     myHand, myDeckLeft: left.filter((id) => !handIds.includes(id)),
@@ -697,7 +707,7 @@ function renderPlayed() {
   const ev = oppDeckEvents();
   $('playedCount').textContent = `${ev.length}/12`;
   $('played').innerHTML = ev.length
-    ? ev.map((e) => `<button class="pcard" data-unevent="${e.uid}" aria-label="Remove ${esc(nameOf(e.id))}">${artHtml(cards.get(e.id)?.art, nameOf(e.id))}<span class="lbl">${esc(nameOf(e.id))}${e.t === 'log' ? ' ·?' : ''}</span><i>✕</i></button>`).reverse().join('')
+    ? ev.map((e) => `<button class="pcard" data-unevent="${e.uid}" aria-label="Remove ${esc(nameOf(e.id))}">${artHtml(cards.get(e.id)?.art, nameOf(e.id))}<span class="lbl">${esc(nameOf(e.id))}${e.t === 'log' ? ' ·?' : e.t === 'start' ? ' ·start' : ''}</span><i>✕</i></button>`).reverse().join('')
     : '<div class="empty">Tap a card below as your opponent plays it, then tap where it went.</div>';
 }
 
@@ -835,8 +845,9 @@ function openPlace(side, id) {
   const c = cards.get(id);
   $('actTitle').textContent = side === 'opp' ? 'Where did they play it?' : 'Where are you playing it?';
   const handTxt = state.mine[id] === 'hand' ? 'Not in my hand' : 'Mark in my hand';
-  $('actBody').innerHTML = `<div class="act-card">${artHtml(c?.art, nameOf(id))}<div><b>${esc(nameOf(id))}</b> <span class="cp"><span class="cost">${c?.cost ?? '?'}</span><span class="pow">${c?.power ?? '?'}</span></span><p>${esc(abilityNote(id))}</p></div></div>
+  $('actBody').innerHTML = `<div class="act-card">${artHtml(c?.art, nameOf(id))}<div><b>${esc(nameOf(id))}</b> <span class="cp"><span class="cost">${c?.cost ?? '?'}</span><span class="pow">${c?.power ?? '?'}</span></span><p>${esc(abilityNote(id, side))}</p></div></div>
     ${laneButtons('placeat', null, side)}
+    ${side === 'opp' && isGameStart(id) ? '<button class="btn primary" data-placeat="start" style="width:100%;margin-bottom:6px">Seen at Game Start</button>' : ''}
     ${side === 'opp' ? '<button class="btn" data-placeat="log" style="width:100%">Seen, but don’t place it</button>' : `<button class="btn" data-toggleHand="1" style="width:100%">${handTxt}</button>`}`;
   $('actSheet').showModal();
 }
@@ -848,7 +859,7 @@ function openChip(uid) {
   const info = cards.get(card.id);
   const evt = state.events.find((e) => e.uid === uid);
   $('actTitle').textContent = `${card.side === 'opp' ? 'Their' : 'Your'} ${nameOf(card.id)}`;
-  $('actBody').innerHTML = `<div class="act-card">${artHtml(info?.art, nameOf(card.id))}<div><b>${esc(nameOf(card.id))}</b> at ${esc(locName(card.lane))}${card.created ? ' · created' : ''}<p>${esc(abilityNote(card.id))}${card.moves ? ` Moved ${plural(card.moves, 'time')}.` : ''}</p></div></div>
+  $('actBody').innerHTML = `<div class="act-card">${artHtml(info?.art, nameOf(card.id))}<div><b>${esc(nameOf(card.id))}</b> at ${esc(locName(card.lane))}${card.created ? ' · created' : ''}<p>${esc(abilityNote(card.id, card.side))}${card.moves ? ` Moved ${plural(card.moves, 'time')}.` : ''}</p></div></div>
     <div class="act-label">Moved to</div>
     ${laneButtons('moveto', card.lane, card.side)}
     <div class="act-label">Power</div>
@@ -871,12 +882,13 @@ $('actSheet').addEventListener('click', (e) => {
   if (d.placeat !== undefined) {
     const uid = newUid();
     if (d.placeat === 'log') state.events.push({ t: 'log', uid, side: act.side, id: act.id, turn: state.turn });
+    else if (d.placeat === 'start') state.events.unshift({ t: 'start', uid, side: act.side, id: act.id, turn: 1 });
     else {
       state.events.push({ t: 'play', uid, side: act.side, id: act.id, lane: Number(d.placeat), turn: state.turn });
       if (act.side === 'me') delete state.mine[act.id];
     }
-    const lane = d.placeat === 'log' ? '' : ` at ${locName(Number(d.placeat))}`;
-    toast(`${act.side === 'opp' ? 'They' : 'You'} played ${nameOf(act.id)}${lane}`, prev);
+    const lane = d.placeat === 'log' || d.placeat === 'start' ? '' : ` at ${locName(Number(d.placeat))}`;
+    toast(d.placeat === 'start' ? `Game Start: ${nameOf(act.id)}` : `${act.side === 'opp' ? 'They' : 'You'} played ${nameOf(act.id)}${lane}`, prev);
     $('search').value = '';
   } else if (d.togglehand) {
     if (state.mine[act.id] === 'hand') delete state.mine[act.id]; else state.mine[act.id] = 'hand';
@@ -935,6 +947,25 @@ function openTextPicker(uid) {
     openChip(uid);
   };
   draw();
+}
+
+// ---- Opponent's Game Start cards ------------------------------------------
+function openGameStartPicker() {
+  $('actTitle').textContent = 'Which Game Start card?';
+  const logged = new Set(state.events.filter((e) => e.t === 'start' && e.side === 'opp').map((e) => e.id));
+  const list = cardData.cards.filter((c) => !c.generated && isGameStart(c.id) && !logged.has(c.id));
+  $('actBody').innerHTML = `<div class="results">${list.map((c) => resHtml(c, 'pick-start')).join('')}</div>`;
+  $('actBody').onclick = (e) => {
+    const t = e.target.closest('[data-pick-start]');
+    if (!t) return;
+    const prev = snapshot();
+    state.events.unshift({ t: 'start', uid: newUid(), side: 'opp', id: t.dataset.pickStart, turn: 1 });
+    $('actBody').onclick = null;
+    $('actSheet').close();
+    toast(`Game Start: ${nameOf(t.dataset.pickStart)}`, prev);
+    render();
+  };
+  $('actSheet').showModal();
 }
 
 // ---- Correct a guessed card ------------------------------------------------
@@ -1117,6 +1148,7 @@ document.body.addEventListener('click', (e) => {
   } else if (d.loc !== undefined) return openSheet(Number(d.loc));
   else if (d.sort) state.sort = d.sort;
   else if (t.id === 'more') state.showAll = !state.showAll;
+  else if (t.id === 'gameStartBtn') return openGameStartPicker();
   else if (t.id === 'reset') {
     const prev = snapshot();
     state = { ...fresh(), sort: state.sort };

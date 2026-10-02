@@ -57,3 +57,18 @@ test('Anti-Polar Magneto places likely 3/4-Costs from the predicted hand on the 
   assert.equal(placed.length, 2);
   assert.ok(placed.every((c) => c.guess));
 });
+
+test('High Evolutionary (seen at Game Start) evolves their no-ability cards', () => {
+  const start = { t: 'start', uid: 'hs', side: 'opp', id: 'HighEvolutionary', turn: 1 };
+  const plain = buildBoard([play('me', 'MistyKnight', 0, 1), play('opp', 'TheThing', 0, 4)], { cards, lanes, turn: 5 });
+  const evo = buildBoard([start, play('me', 'MistyKnight', 0, 1), play('opp', 'TheThing', 0, 4)], { cards, lanes, turn: 5 });
+  assert.equal(plain.lanes[0].me.power, 3);
+  assert.equal(evo.lanes[0].me.power, 2);
+});
+
+test('Agamotto and Dormammu get their Game Start cards in playouts', () => {
+  const z = zones({ hand: [zc('Agamotto')], deck: [zc('Hulk'), zc('Dormammu')] });
+  const b = sim([], z, 1, 1);
+  assert.equal(b.zones.me.deck.filter((k) => /Spell0\dAgamotto/.test(k.id)).length, 4);
+  assert.ok(b.zones.me.hand.some((k) => k.id === 'SummoningRitual01Dormammu'));
+});
